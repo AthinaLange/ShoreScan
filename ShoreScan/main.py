@@ -1,7 +1,7 @@
 # ShoreScan
 
 from c_Datastore import ImageDatastore, ShorelineDatastore
-from c_Workflow import Workflow
+from c_Workflow import ShorelineWorkflow
 from utils import check_processed_images, remove_processed_images, process_images
 #from utils import create_video_from_images
 
@@ -15,6 +15,9 @@ def main():
     - Loads user-specified image data.
     - Filters images based on various criteria.
     - Processes shoreline images based on user-defined options.
+
+    Returns:
+        None
     """
     # Initialize the datastore
     #datastore = ImageDatastore(root_folder='data')

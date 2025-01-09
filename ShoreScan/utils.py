@@ -9,8 +9,10 @@ Functions:
     - removed_processed_images
     - process_images
 """
-
+from c_Workflow import ShorelineWorkflow
 import cv2
+import os
+import matplotlib.pyplot as plt
 
 def create_video_from_images(datastore, video_name="output_video.mp4", frame_rate=30, image_type='timex', camera=None, site=None):
     """
