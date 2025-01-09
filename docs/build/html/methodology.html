@@ -1,0 +1,244 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Processing Methods &mdash; ShoreScan 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="ShoreScan Package" href="modules.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ShoreScan
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="modules.html">ShoreScan Package</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Processing Methods</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#process-bright-self">process_bright(self)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#process-timex-self">process_timex(self)</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ShoreScan</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Processing Methods</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/methodology.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="processing-methods">
+<h1>Processing Methods<a class="headerlink" href="#processing-methods" title="Link to this heading"></a></h1>
+<p>The shoreline extraction process involves several key steps, each contributing to a robust model capable of accurately identifying and processing shoreline points. Here’s an overview of the steps involved, including specific values for parameters used in each stage:</p>
+<p><strong>Finding Surfzone Points</strong>: The first step involves extracting up to five random points from the largest connected component within the image, using an Otsu threshold to isolate the surfzone area (the white region). The image is preprocessed by converting it to grayscale and applying a binary threshold. Morphological operations, including opening and erosion with a kernel of size (25, 100), are used to clean the mask. The random points are selected in intervals of 200 pixels along the x-axis. This process is repeated up to 100 times (max attempts) to ensure enough points are found. If successful, the extracted points are used for further segmentation.</p>
+<p><strong>SAM Model Prediction</strong>: After identifying the shoreline points, the next step is to use the Segment Anything Model (SAM) for segmentation. The SAM model is loaded using the specified checkpoint, “segment-anything-main/sam_vit_h_4b8939.pth”, and set to use the “vit_h” model type. The model takes the identified surfzone points, labels them as foreground, and outputs a mask. The best mask is selected based on the highest score, which indicates the model’s confidence in the prediction. The model is implemented in PyTorch, and it runs on either a CUDA-enabled GPU or CPU depending on the device availability.</p>
+<p><strong>Bottom Boundary Extraction</strong>: Once the mask is generated, the next step is to extract the bottom boundary, which represents the shoreline’s lower boundary (maximum y-coordinate for each x-coordinate). This is done by iterating over each x-coordinate and identifying the corresponding y-coordinate where the mask is non-zero. The points are then interpolated to ensure the boundary is continuous and precise.</p>
+<p><strong>Watershed Segmentation</strong>: The final segmentation step involves using the watershed algorithm to refine the boundary. The median bottom boundary points are used as the boundary between sand and water. A dynamic offset from the obtained points based on the exponent of the mean gradient of the window, then smoothed with a Gaussian filter with a kernel size of 200 is used to generate the water markers as above this line and sand markers below. The watershed algorithm is then applied, and the boundary extracted. The result is a set of boundary coordinates that represent an alternative shoreline.</p>
+<p><strong>Evaluation</strong>: To evaluate the accuracy of the extracted shorelines, the root mean square error (RMSE) between the watershed coordinates and the median bottom boundary is computed. Additionally, the y-distance between the two sets of coordinates is calculated to assess how closely the watershed boundary aligns with the true shoreline. Points where the y-distance exceeds a threshold (bright: 30, timex: 10 pixels) are flagged as outliers and excluded from the final shoreline obtained from the median bottom boundary of the SAM model.</p>
+<section id="process-bright-self">
+<h2>process_bright(self)<a class="headerlink" href="#process-bright-self" title="Link to this heading"></a></h2>
+<p>The <cite>_process_bright</cite> method processes images of the <cite>bright</cite> type and extracts shoreline data through several steps. This method is specifically designed to handle high-contrast images where the surf zone is well-defined.</p>
+<p><strong>Workflow:</strong></p>
+<ul>
+<li><p><strong>Metadata Extraction:</strong>
+- Extracts metadata (e.g., month, day, time, year, site, and camera) directly from the image file name.
+- These details are used to store results in the <cite>ShorelineDatastore</cite>.</p></li>
+<li><p><strong>Surfzone Point Identification:</strong>
+- Locates random points in the surfzone region by:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Processing the image to find the largest connected component above an Otsu threshold (typically representing the surf zone).</p></li>
+<li><p>Selecting random points from this region to initialize the SAM segmentation model (minimum 5 points or every 200 pixels).</p></li>
+</ul>
+</div></blockquote>
+<ul class="simple">
+<li><p>These surfzone points anchor the segmentation process.</p></li>
+</ul>
+</li>
+<li><p><strong>Bottom Boundary Detection:</strong>
+- Attempts to extract the bottom boundary of the surf zone three times using the SAM (Segment Anything Model) for segmentation:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Surfzone points are used to predict a segmentation mask for the surf zone.</p></li>
+<li><p>The bottom boundary is extracted from the mask as the maximum y-value for each x-coordinate.</p></li>
+<li><p>Each x-coordinate has only one y-value, which may cause issues in along-shore camera angles with edge waves.</p></li>
+</ul>
+</div></blockquote>
+<ul class="simple">
+<li><p>Repeats the process three times to reduce noise, calculating the median of the three boundaries as the final bottom boundary.</p></li>
+</ul>
+</li>
+<li><p><strong>Watershed Segmentation:</strong>
+- The median bottom boundary is used as the boundary between ocean and sand.
+- Random points above and below this boundary are inputs to the watershed segmentation algorithm.
+- The watershed algorithm refines the shoreline boundary by separating water from sand.</p></li>
+<li><p><strong>Metrics Calculation:</strong>
+- Calculates:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><strong>Y-Distance</strong> between the watershed boundary and the SAM-extracted bottom boundary.</p></li>
+<li><p><strong>Root Mean Squared Error (RMSE)</strong> for segmentation accuracy.</p></li>
+</ul>
+</div></blockquote>
+<ul class="simple">
+<li><p>Flags outliers where the y-distance exceeds 30 pixels, excluding them from the final shoreline.</p></li>
+</ul>
+</li>
+<li><p><strong>Visualization:</strong>
+- If <cite>make_intermediate_plots</cite> is enabled:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Visualizations are generated, including:
+- The original image overlaid with detected boundaries.
+- Intermediate segmentation masks and watershed results.</p></li>
+<li><p>Final visualizations are saved in the <cite>shoreline_plots</cite> directory.</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p><strong>Data Storage:</strong>
+- Stores the following in the <cite>ShorelineDatastore</cite>:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Final shoreline coordinates.</p></li>
+<li><p>Bottom boundary and watershed segmentation results.</p></li>
+<li><p>Computed metrics (e.g., RMSE, y-distance).</p></li>
+</ul>
+</div></blockquote>
+</li>
+</ul>
+<p><strong>Suitability:</strong>
+This method is ideal for <cite>bright</cite> images due to their higher contrast and well-defined boundaries, enabling accurate segmentation and analysis.</p>
+</section>
+<section id="process-timex-self">
+<h2>process_timex(self)<a class="headerlink" href="#process-timex-self" title="Link to this heading"></a></h2>
+<p>The <cite>_process_timex</cite> method processes images of the <cite>timex</cite> type, which are typically long-exposure images showing time-averaged wave patterns. This method leverages results from previously processed <cite>bright</cite> images to assist in segmentation.</p>
+<p><strong>Workflow:</strong></p>
+<ul>
+<li><p><strong>Metadata Extraction:</strong>
+- Extracts metadata (e.g., site, camera, date, and time) from the image file name.
+- Metadata is used to retrieve previously processed results and store new outputs.</p></li>
+<li><p><strong>Integration with `bright` Results:</strong>
+- Retrieves shoreline coordinates from a corresponding <cite>bright</cite> image in the <cite>ShorelineDatastore</cite>.
+- These coordinates serve as the initial boundary for segmentation in the <cite>timex</cite> image.</p></li>
+<li><p><strong>Bottom Boundary Detection:</strong>
+- Generates random points slightly above the retrieved shoreline coordinates to mark the surf zone in the <cite>timex</cite> image.
+- Performs SAM segmentation three times to extract bottom boundaries using these points.
+- Computes the median bottom boundary for stability.</p></li>
+<li><p><strong>Watershed Segmentation:</strong>
+- Refines the median bottom boundary using the watershed segmentation algorithm to separate the shoreline from other regions.</p></li>
+<li><p><strong>Metrics Calculation:</strong>
+- Calculates:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><strong>Y-Distance</strong> between the watershed boundary and the SAM-generated boundary.</p></li>
+<li><p><strong>RMSE</strong> for segmentation accuracy.</p></li>
+</ul>
+</div></blockquote>
+<ul class="simple">
+<li><p>Applies a stricter threshold (10 pixels for y-distance) to filter outliers compared to <cite>_process_bright</cite>.</p></li>
+</ul>
+</li>
+<li><p><strong>Visualization:</strong>
+- If <cite>make_intermediate_plots</cite> is enabled:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Generates plots similar to <cite>_process_bright</cite>.</p></li>
+<li><p>Includes the retrieved <cite>bright</cite> shoreline for comparison.</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p><strong>Data Storage:</strong>
+- Stores the following in the <cite>ShorelineDatastore</cite>:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Shoreline coordinates.</p></li>
+<li><p>Segmentation results.</p></li>
+<li><p>Computed metrics (e.g., RMSE, y-distance).</p></li>
+</ul>
+</div></blockquote>
+</li>
+</ul>
+<p><strong>Suitability:</strong>
+This method is particularly effective for <cite>timex</cite> images, which often lack sharp contrasts. Integrating results from <cite>bright</cite> images ensures accurate shoreline detection.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="modules.html" class="btn btn-neutral float-left" title="ShoreScan Package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Athina MZ Lange.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,917 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>c_Datastore &mdash; ShoreScan 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=2709fde1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            ShoreScan
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../modules.html">ShoreScan Package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methodology.html">Processing Methods</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ShoreScan</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">c_Datastore</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for c_Datastore</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Datastore Module</span>
+<span class="sd">==========================</span>
+<span class="sd">This module provides datastore classes to store, retrieve, and manage standard ARGUS products </span>
+<span class="sd">and computed shoreline results for various sites and cameras. </span>
+<span class="sd">It supports hierarchical storage and exporting of data.</span>
+
+<span class="sd">Classes:</span>
+<span class="sd">    - ImageDatastore: Main class for managing ARGUS-style imagery data.</span>
+<span class="sd">    - ShorelineDatastore: Main class for managing shoreline-related data.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tkinter</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tk</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tkinter.filedialog</span><span class="w"> </span><span class="kn">import</span> <span class="n">askdirectory</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">cv2</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">csv</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">timezone</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pvlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">solarposition</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">math</span><span class="w"> </span><span class="kn">import</span> <span class="n">radians</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+
+<div class="viewcode-block" id="ImageDatastore">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ImageDatastore">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ImageDatastore</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A class to manage and process image data stored in a hierarchical folder structure.</span>
+
+<span class="sd">    This class handles storing metadata for images in a nested dictionary structure, </span>
+<span class="sd">    allows for image selection, loading, and organizing images based on metadata, </span>
+<span class="sd">    and provides methods for filtering and plotting images.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        images (dict): A nested dictionary structure storing image metadata.</span>
+<span class="sd">        camera_sites (dict): A dictionary mapping sites to their associated cameras.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root_folder</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the ImageDatastore with a root folder containing image files.</span>
+
+<span class="sd">        :param root_folder: (str, optional) The path to the root folder. If None, the user will be prompted to select a folder.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">root_folder</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">root_folder</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">select_folder</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">root_folder</span> <span class="o">=</span> <span class="n">root_folder</span>
+        <span class="c1"># Nested dictionary: site -&gt; camera -&gt; year -&gt; month -&gt; day -&gt; time -&gt; image_type -&gt; path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">images</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)))))))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">camera_sites</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># Dictionary to store camera site information</span>
+
+<span class="c1"># ------------- Folder Selection ------------- </span>
+<div class="viewcode-block" id="ImageDatastore.select_folder">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ImageDatastore.select_folder">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">select_folder</span><span class="p">():</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Opens a dialog to select a folder and returns the selected path.</span>
+
+<span class="sd">        :returns: (str) The path to the selected folder.</span>
+<span class="sd">        </span>
+<span class="sd">        :raises RuntimeError: If folder selection fails.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">Tk</span><span class="p">()</span><span class="o">.</span><span class="n">withdraw</span><span class="p">()</span>
+            <span class="n">folder</span> <span class="o">=</span> <span class="n">askdirectory</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">&quot;Select Root Data Folder&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">folder</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No folder selected. Exiting.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">folder</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Folder selection failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<span class="c1"># ------------- Image Loading and Metadata Parsing ------------- </span>
+<div class="viewcode-block" id="ImageDatastore.load_images">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ImageDatastore.load_images">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_images</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Loads images from the root folder and stores metadata in the images attribute.</span>
+
+<span class="sd">        This method parses the filenames and stores metadata such as timestamp, site, camera, and image type.</span>
+
+<span class="sd">        :raises ValueError: If a file does not conform to the expected format.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">root</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">files</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">walk</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">root_folder</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">file</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">file</span><span class="o">.</span><span class="n">endswith</span><span class="p">((</span><span class="s1">&#39;.jpg&#39;</span><span class="p">,</span> <span class="s1">&#39;.png&#39;</span><span class="p">,</span> <span class="s1">&#39;.jpeg&#39;</span><span class="p">,</span> <span class="s1">&#39;.tiff&#39;</span><span class="p">)):</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="c1"># Parse the filename into its components</span>
+                        <span class="n">parts</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">9</span><span class="p">:</span>
+                            <span class="c1"># Skip files that do not match the expected format</span>
+                            <span class="k">continue</span>
+
+                        <span class="c1"># Extract relevant metadata</span>
+                        <span class="n">timestamp</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># Unix timestamp</span>
+                        <span class="n">month</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>      <span class="c1"># Month</span>
+                        <span class="n">day</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">][:</span><span class="mi">2</span><span class="p">]</span>    <span class="c1"># Day of the month</span>
+                        <span class="n">time</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">][</span><span class="mi">3</span><span class="p">:]</span>   <span class="c1"># Time (HH_MM)</span>
+                        <span class="n">year</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span>       <span class="c1"># Year</span>
+                        <span class="n">site</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span>       <span class="c1"># Site CACO#</span>
+                        <span class="n">camera</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">7</span><span class="p">]</span>     <span class="c1"># Camera (e.g., &quot;c1&quot;)</span>
+                        <span class="n">image_type</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">8</span><span class="p">]</span>   <span class="c1"># Image type (e.g., &quot;bright&quot;, &quot;dark&quot;, &quot;timex&quot;, &quot;snap&quot;)</span>
+
+                        <span class="c1"># Construct full image path</span>
+                        <span class="n">full_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">file</span><span class="p">)</span>
+
+                        <span class="c1"># Create image metadata dictionary</span>
+                        <span class="n">image_metadata</span> <span class="o">=</span> <span class="p">{</span>
+                            <span class="s1">&#39;timestamp&#39;</span><span class="p">:</span> <span class="n">timestamp</span><span class="p">,</span>
+                            <span class="s1">&#39;month&#39;</span><span class="p">:</span> <span class="n">month</span><span class="p">,</span>
+                            <span class="s1">&#39;day&#39;</span><span class="p">:</span> <span class="n">day</span><span class="p">,</span>
+                            <span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="n">time</span><span class="p">,</span>
+                            <span class="s1">&#39;year&#39;</span><span class="p">:</span> <span class="n">year</span><span class="p">,</span>
+                            <span class="s1">&#39;site&#39;</span><span class="p">:</span> <span class="n">site</span><span class="p">,</span>
+                            <span class="s1">&#39;camera&#39;</span><span class="p">:</span> <span class="n">camera</span><span class="p">,</span>
+                            <span class="s1">&#39;image_type&#39;</span><span class="p">:</span> <span class="n">image_type</span><span class="p">,</span>
+                            <span class="s1">&#39;path&#39;</span><span class="p">:</span> <span class="n">full_path</span>
+                        <span class="p">}</span>
+
+                        <span class="c1"># Store image metadata in the nested dictionary</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">)</span>
+
+                    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to parse file </span><span class="si">{</span><span class="n">file</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<span class="c1"># ------------- Copy images to folder</span>
+<div class="viewcode-block" id="ImageDatastore.copy_images_to_folder">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ImageDatastore.copy_images_to_folder">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">copy_images_to_folder</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">destination_folder</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">hierarchical</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Copies all images from the datastore to the specified destination folder.</span>
+
+<span class="sd">        :param destination_folder: (str, optional) The path to the destination folder where images will be copied. If None, uses the original directory.</span>
+<span class="sd">        :param hierarchical: (bool) If True, organizes images into subfolders by site, camera, year, month, and image type. If False, all images are copied to a single folder.</span>
+<span class="sd">        </span>
+<span class="sd">        :raises ValueError: If the destination folder is not specified or invalid (when not saving to the original folder).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># If no destination folder is provided, use the image&#39;s original folder.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">destination_folder</span><span class="p">:</span>
+            <span class="n">destination_folder</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Means to use the image&#39;s current path</span>
+
+        <span class="c1"># Ensure the destination folder exists, if it is specified</span>
+        <span class="k">if</span> <span class="n">destination_folder</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">destination_folder</span><span class="p">):</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">destination_folder</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">traverse_and_copy</span><span class="p">(</span><span class="n">site</span><span class="p">,</span> <span class="n">camera</span><span class="p">,</span> <span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="p">,</span> <span class="n">images_by_type</span><span class="p">):</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            Helper function to copy images based on the current traversal point.</span>
+
+<span class="sd">            :param site: The site identifier.</span>
+<span class="sd">            :type site: str</span>
+<span class="sd">            :param camera: The camera identifier.</span>
+<span class="sd">            :type camera: str</span>
+<span class="sd">            :param year: The year the image was taken.</span>
+<span class="sd">            :type year: str</span>
+<span class="sd">            :param month: The month the image was taken.</span>
+<span class="sd">            :type month: str</span>
+<span class="sd">            :param images_by_type: A dictionary of image types to their respective image data.</span>
+<span class="sd">            :type images_by_type: dict</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="k">for</span> <span class="n">image_type</span><span class="p">,</span> <span class="n">image_list</span> <span class="ow">in</span> <span class="n">images_by_type</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">image_data</span> <span class="ow">in</span> <span class="n">image_list</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="c1"># Get image source path</span>
+                        <span class="n">src_path</span> <span class="o">=</span> <span class="n">image_data</span><span class="p">[</span><span class="s1">&#39;path&#39;</span><span class="p">]</span>
+
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">src_path</span><span class="p">):</span>
+                            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Source file </span><span class="si">{</span><span class="n">src_path</span><span class="si">}</span><span class="s2"> does not exist. Skipping.&quot;</span><span class="p">)</span>
+                            <span class="k">continue</span>
+
+                        <span class="c1"># Determine destination path</span>
+                        <span class="k">if</span> <span class="n">destination_folder</span><span class="p">:</span>
+                            <span class="k">if</span> <span class="n">hierarchical</span><span class="p">:</span>
+                                <span class="c1"># Create hierarchical folder structure</span>
+                                <span class="n">folder_hierarchy</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">destination_folder</span><span class="p">,</span> <span class="n">site</span><span class="p">,</span> <span class="n">camera</span><span class="p">,</span> <span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="p">,</span> <span class="n">image_type</span><span class="p">)</span>
+                                <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">folder_hierarchy</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                                <span class="n">dst_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">folder_hierarchy</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">src_path</span><span class="p">))</span>
+                            <span class="k">else</span><span class="p">:</span>
+                                <span class="c1"># Single flat folder</span>
+                                <span class="n">dst_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">destination_folder</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">src_path</span><span class="p">))</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="c1"># If no destination folder is specified, use the original image&#39;s folder</span>
+                            <span class="n">dst_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">src_path</span><span class="p">),</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">src_path</span><span class="p">))</span>
+
+                        <span class="c1"># Copy the image</span>
+                        <span class="n">shutil</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">src_path</span><span class="p">,</span> <span class="n">dst_path</span><span class="p">)</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Copied </span><span class="si">{</span><span class="n">src_path</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">dst_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+                    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to copy </span><span class="si">{</span><span class="n">src_path</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Traverse the nested image datastore</span>
+        <span class="k">for</span> <span class="n">site</span><span class="p">,</span> <span class="n">cameras</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">camera</span><span class="p">,</span> <span class="n">years</span> <span class="ow">in</span> <span class="n">cameras</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">year</span><span class="p">,</span> <span class="n">months</span> <span class="ow">in</span> <span class="n">years</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">for</span> <span class="n">month</span><span class="p">,</span> <span class="n">days</span> <span class="ow">in</span> <span class="n">months</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                        <span class="k">for</span> <span class="n">day</span><span class="p">,</span> <span class="n">times</span> <span class="ow">in</span> <span class="n">days</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                            <span class="k">for</span> <span class="n">time</span><span class="p">,</span> <span class="n">images_by_type</span> <span class="ow">in</span> <span class="n">times</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                <span class="n">traverse_and_copy</span><span class="p">(</span><span class="n">site</span><span class="p">,</span> <span class="n">camera</span><span class="p">,</span> <span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="p">,</span> <span class="n">images_by_type</span><span class="p">)</span></div>
+
+
+ <span class="c1"># ------------- Image Listing ------------- </span>
+<div class="viewcode-block" id="ImageDatastore.list_images">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ImageDatastore.list_images">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">list_images</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">site</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">camera</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">year</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">month</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Lists images optionally filtered by site, camera, year, and month.</span>
+
+<span class="sd">        :param site: (str, optional) The site identifier to filter by.</span>
+<span class="sd">        :param camera: (str, optional) The camera identifier to filter by.</span>
+<span class="sd">        :param year: (str, optional) The year to filter by.</span>
+<span class="sd">        :param month: (str, optional) The month to filter by.</span>
+<span class="sd">        </span>
+<span class="sd">        :returns: (dict) A filtered list of images.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">filtered_images</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">images</span>
+        <span class="k">if</span> <span class="n">site</span><span class="p">:</span>
+            <span class="n">filtered_images</span> <span class="o">=</span> <span class="p">{</span><span class="n">site</span><span class="p">:</span> <span class="n">filtered_images</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">site</span><span class="p">,</span> <span class="p">{})}</span>
+        <span class="k">if</span> <span class="n">camera</span><span class="p">:</span>
+            <span class="n">filtered_images</span> <span class="o">=</span> <span class="p">{</span><span class="n">site</span><span class="p">:</span> <span class="p">{</span><span class="n">camera</span><span class="p">:</span> <span class="n">filtered_images</span><span class="p">[</span><span class="n">site</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">camera</span><span class="p">,</span> <span class="p">{})}</span> <span class="k">for</span> <span class="n">site</span> <span class="ow">in</span> <span class="n">filtered_images</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">year</span><span class="p">:</span>
+            <span class="n">filtered_images</span> <span class="o">=</span> <span class="p">{</span><span class="n">site</span><span class="p">:</span> <span class="p">{</span><span class="n">cam</span><span class="p">:</span> <span class="p">{</span><span class="n">year</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">year</span><span class="p">,</span> <span class="p">{})}</span> <span class="k">for</span> <span class="n">cam</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">cams</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span> 
+                               <span class="k">for</span> <span class="n">site</span><span class="p">,</span> <span class="n">cams</span> <span class="ow">in</span> <span class="n">filtered_images</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="k">if</span> <span class="n">month</span><span class="p">:</span>
+            <span class="n">filtered_images</span> <span class="o">=</span> <span class="p">{</span><span class="n">site</span><span class="p">:</span> <span class="p">{</span><span class="n">cam</span><span class="p">:</span> <span class="p">{</span><span class="n">year</span><span class="p">:</span> <span class="p">{</span><span class="n">month</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">month</span><span class="p">,</span> <span class="p">{})}</span> <span class="k">for</span> <span class="n">year</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">years</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+                               <span class="k">for</span> <span class="n">cam</span><span class="p">,</span> <span class="n">years</span> <span class="ow">in</span> <span class="n">cams</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span> <span class="k">for</span> <span class="n">site</span><span class="p">,</span> <span class="n">cams</span> <span class="ow">in</span> <span class="n">filtered_images</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+
+        <span class="c1"># Print results</span>
+        <span class="k">for</span> <span class="n">site</span><span class="p">,</span> <span class="n">cameras</span> <span class="ow">in</span> <span class="n">filtered_images</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Site: </span><span class="si">{</span><span class="n">site</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">cam</span><span class="p">,</span> <span class="n">years</span> <span class="ow">in</span> <span class="n">cameras</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Camera: </span><span class="si">{</span><span class="n">cam</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">yr</span><span class="p">,</span> <span class="n">months</span> <span class="ow">in</span> <span class="n">years</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;    Year: </span><span class="si">{</span><span class="n">yr</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">mnth</span><span class="p">,</span> <span class="n">days</span> <span class="ow">in</span> <span class="n">months</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;      Month: </span><span class="si">{</span><span class="n">mnth</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">day</span><span class="p">,</span> <span class="n">times</span> <span class="ow">in</span> <span class="n">days</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;        Day: </span><span class="si">{</span><span class="n">day</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                            <span class="k">for</span> <span class="n">time</span><span class="p">,</span> <span class="n">types</span> <span class="ow">in</span> <span class="n">times</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;          Time: </span><span class="si">{</span><span class="n">time</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                                <span class="k">for</span> <span class="n">image_type</span><span class="p">,</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">types</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;            </span><span class="si">{</span><span class="n">image_type</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<span class="c1"># ------------- Image Statistics ------------- </span>
+<div class="viewcode-block" id="ImageDatastore.image_stats">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ImageDatastore.image_stats">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">image_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Displays statistics about the images stored in the datastore.</span>
+
+<span class="sd">        :returns: None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">total_images</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">days_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">camera_counts</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+        <span class="n">type_counts</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+        <span class="n">camera_sites_stats</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s1">&#39;total_images&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+            <span class="s1">&#39;days_set&#39;</span><span class="p">:</span> <span class="nb">set</span><span class="p">(),</span>
+            <span class="s1">&#39;camera_counts&#39;</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">),</span>
+            <span class="s1">&#39;type_counts&#39;</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+        <span class="p">})</span>
+
+        <span class="c1"># Traverse the nested structure to gather statistics</span>
+        <span class="k">for</span> <span class="n">site</span><span class="p">,</span> <span class="n">cameras</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">camera</span><span class="p">,</span> <span class="n">years</span> <span class="ow">in</span> <span class="n">cameras</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">year</span><span class="p">,</span> <span class="n">months</span> <span class="ow">in</span> <span class="n">years</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">for</span> <span class="n">month</span><span class="p">,</span> <span class="n">days</span> <span class="ow">in</span> <span class="n">months</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                        <span class="k">for</span> <span class="n">day</span><span class="p">,</span> <span class="n">times</span> <span class="ow">in</span> <span class="n">days</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                            <span class="k">for</span> <span class="n">time</span><span class="p">,</span> <span class="n">images_by_type</span> <span class="ow">in</span> <span class="n">times</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                <span class="k">for</span> <span class="n">image_type</span><span class="p">,</span> <span class="n">image_data_list</span> <span class="ow">in</span> <span class="n">images_by_type</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                    <span class="k">for</span> <span class="n">image_metadata</span> <span class="ow">in</span> <span class="n">image_data_list</span><span class="p">:</span>
+                                        <span class="c1"># Ensure image_data is a dictionary (with metadata)</span>
+                                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                                            <span class="c1"># Increment total images</span>
+                                            <span class="n">total_images</span> <span class="o">+=</span> <span class="mi">1</span>
+                                            <span class="c1"># Add to days set</span>
+                                            <span class="n">days_set</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">month</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">day</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                                            <span class="c1"># Count images by camera and type</span>
+                                            <span class="n">camera_counts</span><span class="p">[</span><span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;camera&#39;</span><span class="p">]]</span> <span class="o">+=</span> <span class="mi">1</span>
+                                            <span class="n">type_counts</span><span class="p">[</span><span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;image_type&#39;</span><span class="p">]]</span> <span class="o">+=</span> <span class="mi">1</span>
+
+                                            <span class="c1"># Update per-site stats</span>
+                                            <span class="n">camera_sites_stats</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="s1">&#39;total_images&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+                                            <span class="n">camera_sites_stats</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="s1">&#39;days_set&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">month</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">day</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                                            <span class="n">camera_sites_stats</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="s1">&#39;camera_counts&#39;</span><span class="p">][</span><span class="n">camera</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+                                            <span class="n">camera_sites_stats</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="s1">&#39;type_counts&#39;</span><span class="p">][</span><span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;image_type&#39;</span><span class="p">]]</span> <span class="o">+=</span> <span class="mi">1</span>
+                                        <span class="k">else</span><span class="p">:</span>
+                                            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Expected image metadata, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">)</span><span class="si">}</span><span class="s2"> instead.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Print statistics</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Total images: </span><span class="si">{</span><span class="n">total_images</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Distinct days: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">days_set</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Images by type:&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">image_type</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">type_counts</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">image_type</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Images by camera:&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">camera</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">camera_counts</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">camera</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Camera site stats:&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">site</span><span class="p">,</span> <span class="n">stats</span> <span class="ow">in</span> <span class="n">camera_sites_stats</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Site: </span><span class="si">{</span><span class="n">site</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Total images: </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;total_images&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Distinct days: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;days_set&#39;</span><span class="p">])</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Images by camera:&quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">camera</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">stats</span><span class="p">[</span><span class="s1">&#39;camera_counts&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;    </span><span class="si">{</span><span class="n">camera</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Images by type:&quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">image_type</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">stats</span><span class="p">[</span><span class="s1">&#39;type_counts&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;    </span><span class="si">{</span><span class="n">image_type</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ImageDatastore.get_image_metadata_by_type">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ImageDatastore.get_image_metadata_by_type">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_image_metadata_by_type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_types</span><span class="p">,</span> <span class="n">site</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">camera</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Extract metadata for all specified image types, optionally filtering by site and camera.</span>
+
+<span class="sd">        :param image_types: (list) A list of image types (e.g., [&#39;bright&#39;, &#39;snap&#39;]).</span>
+<span class="sd">        :param site: (str, optional) The site to filter by. If not provided, all sites are considered.</span>
+<span class="sd">        :param camera: (str, optional) The camera to filter by. If not provided, all cameras are considered.</span>
+<span class="sd">        </span>
+<span class="sd">        :returns: (list) A list of metadata dictionaries for the specified image types, site, and camera.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">images_metadata</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Traverse through the nested structure</span>
+        <span class="k">for</span> <span class="n">site_key</span><span class="p">,</span> <span class="n">cameras</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">site</span> <span class="ow">and</span> <span class="n">site_key</span> <span class="o">!=</span> <span class="n">site</span><span class="p">:</span>  <span class="c1"># Skip if site doesn&#39;t match the filter</span>
+                <span class="k">continue</span>
+            
+            <span class="k">for</span> <span class="n">camera_key</span><span class="p">,</span> <span class="n">years</span> <span class="ow">in</span> <span class="n">cameras</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">camera</span> <span class="ow">and</span> <span class="n">camera_key</span> <span class="o">!=</span> <span class="n">camera</span><span class="p">:</span>  <span class="c1"># Skip if camera doesn&#39;t match the filter</span>
+                    <span class="k">continue</span>
+
+                <span class="k">for</span> <span class="n">year</span><span class="p">,</span> <span class="n">months</span> <span class="ow">in</span> <span class="n">years</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">for</span> <span class="n">month</span><span class="p">,</span> <span class="n">days</span> <span class="ow">in</span> <span class="n">months</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                        <span class="k">for</span> <span class="n">day</span><span class="p">,</span> <span class="n">times</span> <span class="ow">in</span> <span class="n">days</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                            <span class="k">for</span> <span class="n">time</span><span class="p">,</span> <span class="n">images_by_type</span> <span class="ow">in</span> <span class="n">times</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                <span class="k">for</span> <span class="n">image_type</span> <span class="ow">in</span> <span class="n">image_types</span><span class="p">:</span>
+                                    <span class="k">if</span> <span class="n">image_type</span> <span class="ow">in</span> <span class="n">images_by_type</span><span class="p">:</span>
+                                        <span class="k">for</span> <span class="n">image_metadata</span> <span class="ow">in</span> <span class="n">images_by_type</span><span class="p">[</span><span class="n">image_type</span><span class="p">]:</span>
+                                            <span class="n">images_metadata</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">images_metadata</span></div>
+
+
+<span class="c1"># ------------- Plotting -------------  </span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_year_and_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">year</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Validate the year and index provided for retrieving images.</span>
+
+<span class="sd">        :param year: (str) The year of the images.</span>
+<span class="sd">        :param index: (int) The index of the image within the specified year.</span>
+
+<span class="sd">        :returns: (dict or None) The image metadata if valid, else None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;No images loaded in the datastore.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># Use the first available year if none is provided</span>
+        <span class="k">if</span> <span class="n">year</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">year</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">))</span>
+
+        <span class="c1"># Validate year existence</span>
+        <span class="k">if</span> <span class="n">year</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No images found for the year: </span><span class="si">{</span><span class="n">year</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># Validate index bounds</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">[</span><span class="n">year</span><span class="p">])):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid index </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">. Year </span><span class="si">{</span><span class="n">year</span><span class="si">}</span><span class="s2"> contains </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">[</span><span class="n">year</span><span class="p">])</span><span class="si">}</span><span class="s2"> images.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># Return valid image metadata</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">[</span><span class="n">year</span><span class="p">][</span><span class="n">index</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_plot_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_path</span><span class="p">,</span> <span class="n">title</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Helper function to plot an image given its path and title.</span>
+
+<span class="sd">        :param image_path: (str) Path to the image file.</span>
+<span class="sd">        :param title: (str) Title to display on the plot.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">image_path</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">image</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to load image: </span><span class="si">{</span><span class="n">image_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+        
+        <span class="n">image_rgb</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2RGB</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image_rgb</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="n">title</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<div class="viewcode-block" id="ImageDatastore.plot_image">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ImageDatastore.plot_image">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">plot_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_metadata</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Plot a single image using its metadata dictionary.</span>
+
+<span class="sd">        :param image_metadata: (dict) A dictionary containing the image&#39;s metadata.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">title</span> <span class="o">=</span> <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Camera: </span><span class="si">{</span><span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;camera&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">, Type: </span><span class="si">{</span><span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;image_type&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;month&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;day&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_plot_image</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;path&#39;</span><span class="p">],</span> <span class="n">title</span><span class="p">)</span></div>
+
+
+<span class="c1"># ------------- Camera Site Info ------------- </span>
+<div class="viewcode-block" id="ImageDatastore.load_camera_sites">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ImageDatastore.load_camera_sites">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_camera_sites</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">csv_file</span> <span class="o">=</span> <span class="s1">&#39;camera_sites.csv&#39;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Load camera sites data (lat, lon, and camera angle) from a CSV file.</span>
+
+<span class="sd">        :param csv_file: (str, optional) The path to the CSV file containing camera site data.</span>
+<span class="sd">        </span>
+<span class="sd">        :returns: dict: (dict) A dictionary with site names as keys and tuples (lat, lon, camera_angle) as values.</span>
+<span class="sd">        </span>
+<span class="sd">        :raises ValueError: If the data in the CSV file is invalid or incomplete.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">csv_file</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+                <span class="n">reader</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">DictReader</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">reader</span><span class="p">:</span>
+                    <span class="n">site</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;site&#39;</span><span class="p">]</span>
+                    <span class="n">lat</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;lat&#39;</span><span class="p">])</span>
+                    <span class="n">lon</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;lon&#39;</span><span class="p">])</span>
+                    <span class="n">angle</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;camera_angle&#39;</span><span class="p">])</span>  <span class="c1"># Camera angle (in degrees)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">camera_sites</span><span class="p">[</span><span class="n">site</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;lat&#39;</span><span class="p">:</span> <span class="n">lat</span><span class="p">,</span> <span class="s1">&#39;lon&#39;</span><span class="p">:</span> <span class="n">lon</span><span class="p">,</span> <span class="s1">&#39;angle&#39;</span><span class="p">:</span> <span class="n">angle</span><span class="p">}</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loaded camera site info from </span><span class="si">{</span><span class="n">csv_file</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error loading camera site info from </span><span class="si">{</span><span class="n">csv_file</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<span class="c1"># ------------- Filters -------------</span>
+
+<div class="viewcode-block" id="ImageDatastore.filter_black_images">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ImageDatastore.filter_black_images">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">filter_black_images</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span> <span class="o">=</span> <span class="mi">50</span><span class="p">,</span> <span class="n">image_type</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Remove images from the datastore that are too dark.</span>
+
+<span class="sd">        :param threshold: (int) The brightness threshold below which images are considered &quot;too dark&quot;.</span>
+<span class="sd">        :param image_type: (str, optional) If specified, only filter images of this type (e.g., &#39;bright&#39;, &#39;snap&#39;).</span>
+
+<span class="sd">        :return: (list) A list of metadata for the removed images.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">removed_images</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">site</span><span class="p">,</span> <span class="n">cameras</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">camera</span><span class="p">,</span> <span class="n">years</span> <span class="ow">in</span> <span class="n">cameras</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">year</span><span class="p">,</span> <span class="n">months</span> <span class="ow">in</span> <span class="n">years</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">for</span> <span class="n">month</span><span class="p">,</span> <span class="n">days</span> <span class="ow">in</span> <span class="n">months</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                        <span class="k">for</span> <span class="n">day</span><span class="p">,</span> <span class="n">times</span> <span class="ow">in</span> <span class="n">days</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                            <span class="k">for</span> <span class="n">time</span><span class="p">,</span> <span class="n">images_by_type</span> <span class="ow">in</span> <span class="n">times</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                <span class="k">for</span> <span class="n">image_type</span><span class="p">,</span> <span class="n">image_list</span> <span class="ow">in</span> <span class="n">images_by_type</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                    <span class="k">if</span> <span class="n">image_type</span> <span class="ow">and</span> <span class="n">image_type</span> <span class="o">!=</span> <span class="n">image_type</span><span class="p">:</span>
+                                        <span class="k">continue</span>  <span class="c1"># Skip if the image type doesn&#39;t match</span>
+
+                                    <span class="n">filtered_images</span> <span class="o">=</span> <span class="p">[]</span>
+                                    <span class="k">for</span> <span class="n">image_metadata</span> <span class="ow">in</span> <span class="n">image_list</span><span class="p">:</span>
+                                        <span class="n">image_path</span> <span class="o">=</span> <span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;path&#39;</span><span class="p">]</span>
+                                        <span class="n">image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">image_path</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">IMREAD_UNCHANGED</span><span class="p">)</span>
+                                        <span class="k">if</span> <span class="n">image</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                                            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Could not read image </span><span class="si">{</span><span class="n">image_path</span><span class="si">}</span><span class="s2">. Skipping.&quot;</span><span class="p">)</span>
+                                            <span class="k">continue</span>
+
+                                        <span class="c1"># Convert to grayscale and calculate the mean brightness</span>
+                                        <span class="n">gray_image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2GRAY</span><span class="p">)</span>
+                                        <span class="n">mean_brightness</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">gray_image</span><span class="p">)</span>
+
+                                        <span class="k">if</span> <span class="n">mean_brightness</span> <span class="o">&gt;=</span> <span class="n">threshold</span><span class="p">:</span>
+                                            <span class="n">filtered_images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">)</span>
+                                        <span class="k">else</span><span class="p">:</span>
+                                            <span class="n">removed_images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">)</span>
+
+                                    <span class="c1"># Update the dictionary with the filtered images</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">filtered_images</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Filtered </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">removed_images</span><span class="p">)</span><span class="si">}</span><span class="s2"> dark images.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">removed_images</span></div>
+
+
+<div class="viewcode-block" id="ImageDatastore.filter_white_images">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ImageDatastore.filter_white_images">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">filter_white_images</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span> <span class="n">image_type</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Remove images from the datastore that are too bright.</span>
+
+<span class="sd">        :param threshold: (int) The brightness threshold above which images are considered &quot;too bright&quot;.</span>
+<span class="sd">        :param image_type: (str, optional) If specified, only filter images of this type (e.g., &#39;bright&#39;, &#39;snap&#39;).</span>
+
+<span class="sd">        :return: (list) A list of metadata for the removed images.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">removed_images</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">site</span><span class="p">,</span> <span class="n">cameras</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">camera</span><span class="p">,</span> <span class="n">years</span> <span class="ow">in</span> <span class="n">cameras</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">year</span><span class="p">,</span> <span class="n">months</span> <span class="ow">in</span> <span class="n">years</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">for</span> <span class="n">month</span><span class="p">,</span> <span class="n">days</span> <span class="ow">in</span> <span class="n">months</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                        <span class="k">for</span> <span class="n">day</span><span class="p">,</span> <span class="n">times</span> <span class="ow">in</span> <span class="n">days</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                            <span class="k">for</span> <span class="n">time</span><span class="p">,</span> <span class="n">images_by_type</span> <span class="ow">in</span> <span class="n">times</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                <span class="k">for</span> <span class="n">image_type</span><span class="p">,</span> <span class="n">image_list</span> <span class="ow">in</span> <span class="n">images_by_type</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                    <span class="k">if</span> <span class="n">image_type</span> <span class="ow">and</span> <span class="n">image_type</span> <span class="o">!=</span> <span class="n">image_type</span><span class="p">:</span>
+                                        <span class="k">continue</span>  <span class="c1"># Skip if the image type doesn&#39;t match</span>
+
+                                    <span class="n">filtered_images</span> <span class="o">=</span> <span class="p">[]</span>
+                                    <span class="k">for</span> <span class="n">image_metadata</span> <span class="ow">in</span> <span class="n">image_list</span><span class="p">:</span>
+                                        <span class="n">image_path</span> <span class="o">=</span> <span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;path&#39;</span><span class="p">]</span>
+                                        <span class="n">image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">image_path</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">IMREAD_UNCHANGED</span><span class="p">)</span>
+                                        <span class="k">if</span> <span class="n">image</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                                            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Could not read image </span><span class="si">{</span><span class="n">image_path</span><span class="si">}</span><span class="s2">. Skipping.&quot;</span><span class="p">)</span>
+                                            <span class="k">continue</span>
+
+                                        <span class="c1"># Convert to grayscale and calculate the mean brightness</span>
+                                        <span class="n">gray_image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2GRAY</span><span class="p">)</span>
+                                        <span class="n">mean_brightness</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">gray_image</span><span class="p">)</span>
+
+                                        <span class="k">if</span> <span class="n">mean_brightness</span> <span class="o">&lt;=</span> <span class="n">threshold</span><span class="p">:</span>
+                                            <span class="n">filtered_images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">)</span>
+                                        <span class="k">else</span><span class="p">:</span>
+                                            <span class="n">removed_images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">)</span>
+
+                                    <span class="c1"># Update the dictionary with the filtered images</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">filtered_images</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Filtered </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">removed_images</span><span class="p">)</span><span class="si">}</span><span class="s2"> bright images.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">removed_images</span></div>
+
+
+<div class="viewcode-block" id="ImageDatastore.filter_sun_glare">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ImageDatastore.filter_sun_glare">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">filter_sun_glare</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">threshold</span> <span class="o">=</span> <span class="mi">30</span><span class="p">,</span> <span class="n">image_type</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">csv_file</span> <span class="o">=</span> <span class="s1">&#39;camera_sites.csv&#39;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check for potential sun glare in images.</span>
+
+<span class="sd">        :param threshold: (int) The angle in degrees above which the image will be considered to have sun glare.</span>
+<span class="sd">        :param image_type: (str, optional) If specified, only check images of this type (e.g., &#39;bright&#39;, &#39;snap&#39;).</span>
+<span class="sd">        :param csv_file: (str) The path to the CSV file containing camera site data.</span>
+
+<span class="sd">        :return: (list) A list of metadata for the removed images.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">removed_images</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Load camera site information (latitude, longitude, camera angle)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">load_camera_sites</span><span class="p">(</span><span class="n">csv_file</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">site</span><span class="p">,</span> <span class="n">cameras</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">camera</span><span class="p">,</span> <span class="n">years</span> <span class="ow">in</span> <span class="n">cameras</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">year</span><span class="p">,</span> <span class="n">months</span> <span class="ow">in</span> <span class="n">years</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">for</span> <span class="n">month</span><span class="p">,</span> <span class="n">days</span> <span class="ow">in</span> <span class="n">months</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                        <span class="k">for</span> <span class="n">day</span><span class="p">,</span> <span class="n">times</span> <span class="ow">in</span> <span class="n">days</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                            <span class="k">for</span> <span class="n">time</span><span class="p">,</span> <span class="n">images_by_type</span> <span class="ow">in</span> <span class="n">times</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                <span class="k">for</span> <span class="n">image_type</span><span class="p">,</span> <span class="n">image_list</span> <span class="ow">in</span> <span class="n">images_by_type</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                    <span class="k">if</span> <span class="n">image_type</span> <span class="ow">and</span> <span class="n">image_type</span> <span class="o">!=</span> <span class="n">image_type</span><span class="p">:</span>
+                                        <span class="k">continue</span>  <span class="c1"># Skip if the image type doesn&#39;t match</span>
+
+                                    <span class="n">filtered_images</span> <span class="o">=</span> <span class="p">[]</span>
+                                    <span class="k">for</span> <span class="n">image_metadata</span> <span class="ow">in</span> <span class="n">image_list</span><span class="p">:</span>
+                                        <span class="c1"># Get camera site details</span>
+                                        <span class="n">site_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_sites</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">site</span><span class="p">)</span>
+                                        <span class="k">if</span> <span class="ow">not</span> <span class="n">site_data</span><span class="p">:</span>
+                                            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: No camera site data for </span><span class="si">{</span><span class="n">site</span><span class="si">}</span><span class="s2">. Skipping.&quot;</span><span class="p">)</span>
+                                            <span class="k">continue</span>
+
+                                        <span class="n">lat</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">site_data</span><span class="p">[</span><span class="s1">&#39;lat&#39;</span><span class="p">])</span>
+                                        <span class="n">lon</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">site_data</span><span class="p">[</span><span class="s1">&#39;lon&#39;</span><span class="p">])</span>
+                                        <span class="n">camera_angle</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">site_data</span><span class="p">[</span><span class="s1">&#39;angle&#39;</span><span class="p">])</span>
+
+                                        <span class="c1"># Get the Unix timestamp of the image</span>
+                                        <span class="n">timestamp</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;timestamp&#39;</span><span class="p">])</span>
+                                        <span class="n">image_time</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">fromtimestamp</span><span class="p">(</span><span class="n">timestamp</span><span class="p">,</span> <span class="n">tz</span><span class="o">=</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span>
+
+                                        <span class="c1"># Calculate the sun&#39;s position using pvlib</span>
+                                        <span class="n">sun_position</span> <span class="o">=</span> <span class="n">solarposition</span><span class="o">.</span><span class="n">get_solarposition</span><span class="p">(</span><span class="n">image_time</span><span class="p">,</span> <span class="n">lat</span><span class="p">,</span> <span class="n">lon</span><span class="p">)</span>
+                                        <span class="n">sun_elevation</span> <span class="o">=</span> <span class="n">sun_position</span><span class="p">[</span><span class="s1">&#39;elevation&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                                        <span class="n">sun_azimuth</span> <span class="o">=</span> <span class="n">sun_position</span><span class="p">[</span><span class="s1">&#39;azimuth&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+                                        <span class="c1"># Check if the sun&#39;s elevation is above the threshold for glare</span>
+                                        <span class="k">if</span> <span class="n">sun_elevation</span> <span class="o">&gt;=</span> <span class="n">threshold</span><span class="p">:</span>
+                                            <span class="n">sun_azimuth_deg</span> <span class="o">=</span> <span class="n">radians</span><span class="p">(</span><span class="n">sun_azimuth</span><span class="p">)</span>
+                                            <span class="n">camera_angle_deg</span> <span class="o">=</span> <span class="n">radians</span><span class="p">(</span><span class="n">camera_angle</span><span class="p">)</span>
+                                            <span class="n">azimuth_diff</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">sun_azimuth_deg</span> <span class="o">-</span> <span class="n">camera_angle_deg</span><span class="p">)</span>
+
+                                            <span class="c1"># If the difference is small (within glare range), flag it as having glare</span>
+                                            <span class="k">if</span> <span class="n">azimuth_diff</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="mi">15</span><span class="p">):</span>
+                                                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sun glare detected in image: </span><span class="si">{</span><span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;path&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                                                <span class="n">removed_images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">)</span>
+                                            <span class="k">else</span><span class="p">:</span>
+                                                <span class="n">filtered_images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">)</span>
+                                        <span class="k">else</span><span class="p">:</span>
+                                            <span class="n">filtered_images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">)</span>
+
+                                    <span class="c1"># Update the dictionary with the filtered images</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">filtered_images</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Checked for sun glare in </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">removed_images</span><span class="p">)</span><span class="si">}</span><span class="s2"> images.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">removed_images</span></div>
+
+
+<div class="viewcode-block" id="ImageDatastore.filter_blurry_images">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ImageDatastore.filter_blurry_images">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">filter_blurry_images</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">blur_thresholds</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">image_type</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Remove blurry images from the datastore.</span>
+
+<span class="sd">        :param blur_thresholds: (dict, optional) A dictionary where keys are image types </span>
+<span class="sd">                                 (e.g., &#39;bright&#39;, &#39;snap&#39;) and values are the Laplacian variance thresholds below </span>
+<span class="sd">                                 which images are considered blurry. If not provided, the default threshold will be used.</span>
+<span class="sd">        :param image_type: (str, optional) If specified, only filter images of this type (e.g., &#39;bright&#39;, &#39;snap&#39;).</span>
+
+<span class="sd">        :return: (list) A list of metadata for the removed images.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">removed_images</span> <span class="o">=</span> <span class="p">[]</span>
+         <span class="c1"># Set a default threshold if no thresholds are provided</span>
+        <span class="n">default_threshold</span> <span class="o">=</span> <span class="mi">120</span>
+
+        <span class="k">for</span> <span class="n">site</span><span class="p">,</span> <span class="n">cameras</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">camera</span><span class="p">,</span> <span class="n">years</span> <span class="ow">in</span> <span class="n">cameras</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">year</span><span class="p">,</span> <span class="n">months</span> <span class="ow">in</span> <span class="n">years</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">for</span> <span class="n">month</span><span class="p">,</span> <span class="n">days</span> <span class="ow">in</span> <span class="n">months</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                        <span class="k">for</span> <span class="n">day</span><span class="p">,</span> <span class="n">times</span> <span class="ow">in</span> <span class="n">days</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                            <span class="k">for</span> <span class="n">time</span><span class="p">,</span> <span class="n">images_by_type</span> <span class="ow">in</span> <span class="n">times</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                <span class="k">for</span> <span class="n">image_type</span><span class="p">,</span> <span class="n">image_list</span> <span class="ow">in</span> <span class="n">images_by_type</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                                    <span class="k">if</span> <span class="n">image_type</span> <span class="ow">and</span> <span class="n">image_type</span> <span class="o">!=</span> <span class="n">image_type</span><span class="p">:</span>
+                                        <span class="k">continue</span>  <span class="c1"># Skip if the image type doesn&#39;t match</span>
+                                        
+                                    <span class="c1"># Get the threshold for the image type, default to `default_threshold`</span>
+                                    <span class="n">blur_threshold</span> <span class="o">=</span> <span class="n">blur_thresholds</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">image_type</span><span class="p">,</span> <span class="n">default_threshold</span><span class="p">)</span> <span class="k">if</span> <span class="n">blur_thresholds</span> <span class="k">else</span> <span class="n">default_threshold</span>
+
+                                    <span class="n">filtered_images</span> <span class="o">=</span> <span class="p">[]</span>
+                                    <span class="k">for</span> <span class="n">image_metadata</span> <span class="ow">in</span> <span class="n">image_list</span><span class="p">:</span>
+                                        <span class="n">image_path</span> <span class="o">=</span> <span class="n">image_metadata</span><span class="p">[</span><span class="s1">&#39;path&#39;</span><span class="p">]</span>
+                                        <span class="n">image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">image_path</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">IMREAD_UNCHANGED</span><span class="p">)</span>
+                                        <span class="k">if</span> <span class="n">image</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                                            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Could not read image </span><span class="si">{</span><span class="n">image_path</span><span class="si">}</span><span class="s2">. Skipping.&quot;</span><span class="p">)</span>
+                                            <span class="k">continue</span>
+
+                                        <span class="c1"># Calculate the Laplacian variance to check blurriness</span>
+                                        <span class="n">gray_image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2GRAY</span><span class="p">)</span>
+                                        <span class="n">laplacian_var</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">Laplacian</span><span class="p">(</span><span class="n">gray_image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">CV_64F</span><span class="p">)</span><span class="o">.</span><span class="n">var</span><span class="p">()</span>
+
+                                        <span class="k">if</span> <span class="n">laplacian_var</span> <span class="o">&gt;=</span> <span class="n">blur_threshold</span><span class="p">:</span>
+                                            <span class="n">filtered_images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">)</span>
+                                        <span class="k">else</span><span class="p">:</span>
+                                            <span class="n">removed_images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_metadata</span><span class="p">)</span>
+
+                                    <span class="c1"># Update the dictionary with the filtered images</span>
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">images</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">filtered_images</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Filtered </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">removed_images</span><span class="p">)</span><span class="si">}</span><span class="s2"> blurry images.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">removed_images</span></div>
+</div>
+
+
+
+      <span class="c1"># c_ShorelineDatastore.py</span>
+
+
+<div class="viewcode-block" id="ShorelineDatastore">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ShorelineDatastore">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ShorelineDatastore</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A class to manage shoreline data using a nested dictionary structure.</span>
+
+<span class="sd">    This class supports hierarchical storage, retrieval, and export of shoreline</span>
+<span class="sd">    results including error metrics.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        results (defaultdict): A nested dictionary to store shoreline-related data.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize the datastore with the root folder containing the images.</span>
+
+<span class="sd">        :param root_folder: (str) The path to the root folder containing image files.</span>
+<span class="sd">                             If None, a dialog will prompt the user to select a folder.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Nested dictionary to store results: site -&gt; camera -&gt; year -&gt; month -&gt; day -&gt; time -&gt; image_type -&gt; data_type -&gt; data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">results</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">dict</span><span class="p">)))))))</span>
+
+<div class="viewcode-block" id="ShorelineDatastore.store_shoreline_results">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ShorelineDatastore.store_shoreline_results">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">store_shoreline_results</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">site</span><span class="p">,</span> <span class="n">camera</span><span class="p">,</span> <span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="p">,</span> <span class="n">day</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">image_type</span><span class="p">,</span> <span class="n">shoreline_coords</span><span class="p">,</span> <span class="n">bottom_boundary</span><span class="p">,</span> <span class="n">watershed_coords</span><span class="p">,</span> <span class="n">y_distance</span><span class="p">,</span> <span class="n">rmse_value</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Store the computed results for a given image.</span>
+
+<span class="sd">        :param site: (str) The site identifier.</span>
+<span class="sd">        :param camera: (str) The camera identifier.</span>
+<span class="sd">        :param year: (str) The year of the image.</span>
+<span class="sd">        :param month: (str) The month of the image.</span>
+<span class="sd">        :param day: (str) The day of the image.</span>
+<span class="sd">        :param time: (str) The time of the image.</span>
+<span class="sd">        :param image_type: (str) The type of the image (e.g., &#39;bright&#39;).</span>
+<span class="sd">        :param shoreline_coords: (np.ndarray) The final shoreline coords.</span>
+<span class="sd">        :param bottom_boundary: (np.ndarray) The computed bottom boundarys. (1,2,3,median)</span>
+<span class="sd">        :param watershed_coords: (np.ndarray) The watershed coordinates.</span>
+<span class="sd">        :param y_distance: (np.ndarray) The computed y-distance.</span>
+<span class="sd">        :param rmse_value: (float) The computed RMSE value.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c1"># Initialize the data type dictionaries if not present</span>
+        <span class="k">if</span> <span class="s1">&#39;shoreline_coords&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">][</span><span class="s1">&#39;shoreline_coords&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="s1">&#39;bottom_boundary&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">][</span><span class="s1">&#39;bottom_boundary&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="s1">&#39;watershed_coords&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">][</span><span class="s1">&#39;watershed_coords&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="s1">&#39;y_distance&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">][</span><span class="s1">&#39;y_distance&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="s1">&#39;rmse&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">][</span><span class="s1">&#39;rmse&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Store the results</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">][</span><span class="s1">&#39;shoreline_coords&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">shoreline_coords</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">][</span><span class="s1">&#39;bottom_boundary&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bottom_boundary</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">][</span><span class="s1">&#39;watershed_coords&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">watershed_coords</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">][</span><span class="s1">&#39;y_distance&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y_distance</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">][</span><span class="s1">&#39;rmse&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rmse_value</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ShorelineDatastore.get_shoreline_results">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ShorelineDatastore.get_shoreline_results">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_shoreline_results</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">site</span><span class="p">,</span> <span class="n">camera</span><span class="p">,</span> <span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="p">,</span> <span class="n">day</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">image_type</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieve the stored results for a given image.</span>
+
+<span class="sd">        :param site: (str) The site identifier.</span>
+<span class="sd">        :param camera: (str) The camera identifier.</span>
+<span class="sd">        :param year: (str) The year of the image.</span>
+<span class="sd">        :param month: (str) The month of the image.</span>
+<span class="sd">        :param day: (str) The day of the image.</span>
+<span class="sd">        :param time: (str) The time of the image.</span>
+<span class="sd">        :param image_type: (str) The type of the image (e.g., &#39;bright&#39;).</span>
+
+<span class="sd">        :return: (dict) A dictionary containing the shoreline coords, bottom boundary, watershed coords, y-distance, and RMSE values.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="ShorelineDatastore.get_shoreline_coords">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ShorelineDatastore.get_shoreline_coords">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_shoreline_coords</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">site</span><span class="p">,</span> <span class="n">camera</span><span class="p">,</span> <span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="p">,</span> <span class="n">day</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">image_type</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieve all filtered bottom boundaries for a given image.</span>
+
+<span class="sd">        :param site: (str) The site identifier.</span>
+<span class="sd">        :param camera: (str) The camera identifier.</span>
+<span class="sd">        :param year: (str) The year of the image.</span>
+<span class="sd">        :param month: (str) The month of the image.</span>
+<span class="sd">        :param day: (str) The day of the image.</span>
+<span class="sd">        :param time: (str) The time of the image.</span>
+<span class="sd">        :param image_type: (str) The type of the image (e.g., &#39;bright&#39;).</span>
+
+<span class="sd">        :return: (list) A list of all shoreline coords for the given image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Attempt to retrieve the data from the dictionary</span>
+            <span class="n">shoreline_coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">][</span><span class="s1">&#39;shoreline_coords&#39;</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">shoreline_coords</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>  <span class="c1"># If any key is missing, return None</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>  <span class="c1"># In case the expected structure is incorrect (e.g., a non-dict value), also return None</span>
+            <span class="k">return</span> <span class="kc">None</span></div>
+
+        
+<div class="viewcode-block" id="ShorelineDatastore.save_shoreline_coords_to_file">
+<a class="viewcode-back" href="../modules.html#c_Datastore.ShorelineDatastore.save_shoreline_coords_to_file">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save_shoreline_coords_to_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">site</span><span class="p">,</span> <span class="n">camera</span><span class="p">,</span> <span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="p">,</span> <span class="n">day</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">image_type</span><span class="p">,</span> <span class="n">output_folder</span> <span class="o">=</span> <span class="s2">&quot;output&quot;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Save shoreline_coords to a text file with a name based on the dictionary keys.</span>
+
+<span class="sd">        :param site: (str) The site identifier.</span>
+<span class="sd">        :param camera: (str) The camera identifier.</span>
+<span class="sd">        :param year: (str) The year of the image.</span>
+<span class="sd">        :param month: (str) The month of the image.</span>
+<span class="sd">        :param day: (str) The day of the image.</span>
+<span class="sd">        :param time: (str) The time of the image.</span>
+<span class="sd">        :param image_type: (str) The type of the image (e.g., &#39;bright&#39;).</span>
+<span class="sd">        :param output_folder: (str) Folder to save the output file. Default is &quot;output&quot;.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c1"># Ensure the output directory exists</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">output_folder</span><span class="p">,</span> <span class="n">exist_ok</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Generate a filename based on the input parameters</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">site</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">camera</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">year</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">month</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">day</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">time</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">image_type</span><span class="si">}</span><span class="s2">_shoreline_coords.txt&quot;</span>
+        <span class="n">filepath</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">output_folder</span><span class="p">,</span> <span class="n">filename</span><span class="p">)</span>
+
+        <span class="c1"># Retrieve the shoreline coords</span>
+        <span class="n">shoreline_coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">site</span><span class="p">][</span><span class="n">camera</span><span class="p">][</span><span class="n">year</span><span class="p">][</span><span class="n">month</span><span class="p">][</span><span class="n">day</span><span class="p">][</span><span class="n">time</span><span class="p">][</span><span class="n">image_type</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;shoreline_coords&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">shoreline_coords</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;No shoreline coords found for the specified keys.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="c1"># Save to the file</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">filepath</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">coords</span> <span class="ow">in</span> <span class="n">shoreline_coords</span><span class="p">:</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">savetxt</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">fmt</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%.6f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s2">&quot;,&quot;</span><span class="p">)</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># Add a newline between sets of coords for clarity</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Shoreline coords saved to </span><span class="si">{</span><span class="n">filepath</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Athina MZ Lange.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

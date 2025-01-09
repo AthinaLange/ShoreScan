@@ -1,0 +1,953 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>c_Workflow &mdash; ShoreScan 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=2709fde1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            ShoreScan
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../modules.html">ShoreScan Package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../methodology.html">Processing Methods</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ShoreScan</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">c_Workflow</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for c_Workflow</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Workflow Module</span>
+<span class="sd">==========================</span>
+<span class="sd">This module provides workflow classes to obtain shorelines from imagery and compared shorelines.</span>
+
+<span class="sd">Classes:</span>
+<span class="sd">    - ShorelineWorkflow: Main class for determining shoreline from ARGUS-style image products.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">segment_anything</span><span class="w"> </span><span class="kn">import</span> <span class="n">SamPredictor</span><span class="p">,</span> <span class="n">sam_model_registry</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">cv2</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">plotly.graph_objects</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">go</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy</span><span class="w"> </span><span class="kn">import</span> <span class="n">interpolate</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+<div class="viewcode-block" id="ShorelineWorkflow">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ShorelineWorkflow</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A class that processes ARGUS-style image products by applying filtering criteria (brightness, blur, glare),</span>
+<span class="sd">    segmenting the shoreline using the SAM model, and performing analysis on the detected shoreline. </span>
+<span class="sd">    The processed results are stored in the provided datastore.</span>
+
+<span class="sd">    This class supports different image types such as &#39;bright&#39;, &#39;timex&#39;, &#39;dark&#39;, etc., and can generate intermediate plots.</span>
+<span class="sd">    Filtering is applied before any further processing.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        shoreline_datastore (ShorelineDatastore): The datastore to store results.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_path</span><span class="p">,</span> <span class="n">image_type</span><span class="p">,</span> <span class="n">shoreline_datastore</span><span class="p">,</span> <span class="n">make_intermediate_plots</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the workflow for processing a single image.</span>
+
+<span class="sd">        :param image_path: (str) The path to the image to process.</span>
+<span class="sd">        :param image_type: (str) The type of the image (&#39;bright&#39;, &#39;timex&#39;, etc.).</span>
+<span class="sd">        :param shoreline_datastore: (ShorelineDatastore) The datastore to store results.</span>
+<span class="sd">        :param make_intermediate_plots: (bool) Boolean to toggle intermediate plots. Default is False.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_path</span> <span class="o">=</span> <span class="n">image_path</span>  <span class="c1"># Path to the image to process</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_type</span> <span class="o">=</span> <span class="n">image_type</span>  <span class="c1"># Type of the image (&#39;bright&#39;, &#39;timex&#39;, etc.)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shoreline_datastore</span> <span class="o">=</span> <span class="n">shoreline_datastore</span>  <span class="c1"># Datastore to store the results</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">make_intermediate_plots</span> <span class="o">=</span> <span class="n">make_intermediate_plots</span> <span class="c1">#Boolean to toggle intermediate plots.</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_show_plot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">plt_func</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Helper function to handle intermediate plot display.</span>
+<span class="sd">        Only shows the plot if `make_intermediate_plots` is True.</span>
+
+<span class="sd">        :param plt_func: (function) The plotting function to display the plot.</span>
+<span class="sd">        :param args: (tuple) Positional arguments for the plotting function.</span>
+<span class="sd">        :param kwargs: (dict) Keyword arguments for the plotting function.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_intermediate_plots</span><span class="p">:</span>
+            <span class="n">plt_func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+<div class="viewcode-block" id="ShorelineWorkflow.process">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.process">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Main function to process a single image based on the selected `image_type`.</span>
+<span class="sd">        Calls the appropriate workflow method based on the image type.</span>
+
+<span class="sd">        :return: (ShorelineDatastore) The datastore after processing the image or a string indicating failure.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_type</span> <span class="o">==</span> <span class="s1">&#39;bright&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_bright</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_type</span> <span class="o">==</span> <span class="s1">&#39;timex&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_timex</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_type</span> <span class="o">==</span> <span class="s1">&#39;dark&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_dark</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_type</span> <span class="o">==</span> <span class="s1">&#39;snap&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_snap</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_type</span> <span class="o">==</span> <span class="s1">&#39;var&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_var</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s1">&#39;No workflow currently available for this image type.&#39;</span></div>
+
+
+<div class="viewcode-block" id="ShorelineWorkflow.process_bright">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.process_bright">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_bright</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process a single &#39;bright&#39; image.</span>
+<span class="sd">        </span>
+<span class="sd">        This method follows the workflow specific to &#39;bright&#39; image types. It performs the following steps:</span>
+<span class="sd">        1. Extract bottom boundaries from the image in three attempts (using SAM).</span>
+<span class="sd">        2. Apply a watershed segmentation to the image based on SAM shoreline.</span>
+<span class="sd">        3. Compute RMSE between watershed coordinates and SAM shoreline.</span>
+<span class="sd">        4. Plot and store the results.</span>
+
+<span class="sd">        :return: (ShorelineDatastore) The updated shoreline datastore after processing the image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Processing bright image: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Extract metadata from the image path</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">sep</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)</span>  <span class="c1"># Extract filename and split by &#39;.&#39;</span>
+
+        <span class="c1"># Ensure that the file has enough parts for extraction</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">9</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;File does not match the expected format: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Extract relevant metadata from the filename</span>
+        <span class="n">month</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>      <span class="c1"># Month</span>
+        <span class="n">day</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">][:</span><span class="mi">2</span><span class="p">]</span>    <span class="c1"># Day of the month</span>
+        <span class="n">time</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">][</span><span class="mi">3</span><span class="p">:]</span>   <span class="c1"># Time (HH_MM)</span>
+        <span class="n">year</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span>       <span class="c1"># Year</span>
+        <span class="n">site</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span>       <span class="c1"># Site CACO#</span>
+        <span class="n">camera</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">7</span><span class="p">]</span>     <span class="c1"># Camera (e.g., &quot;c1&quot;)</span>
+                
+        <span class="c1"># Initialize arrays to store bottom boundary estimates from three attempts</span>
+        <span class="n">bottom_boundaries</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="c1"># Attempt to find surfzone points and predict using SAM model</span>
+            <span class="n">coords</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find_surfzone_coords</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="p">,</span> <span class="n">num_points</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">make_plot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_intermediate_plots</span><span class="p">)</span>
+            <span class="n">best_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_and_predict_sam_model</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="p">,</span> <span class="n">shoreline_coords</span> <span class="o">=</span> <span class="n">coords</span><span class="p">)</span>
+            <span class="c1"># Extract the bottom boundary from the mask</span>
+            <span class="n">bottom_boundary</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">extract_bottom_boundary_from_mask</span><span class="p">(</span><span class="n">best_mask</span><span class="p">,</span> <span class="n">make_plot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_intermediate_plots</span><span class="p">,</span> <span class="n">image_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="p">)</span>
+            <span class="n">bottom_boundaries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bottom_boundary</span><span class="p">)</span>
+
+        <span class="c1"># Convert bottom boundary attempts into a NumPy array and compute the median bottom boundary</span>
+        <span class="n">bottom_boundaries</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">bottom_boundaries</span><span class="p">)</span>  <span class="c1"># Shape: (3, n, 2)</span>
+        <span class="n">bottom_boundary_median</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">bottom_boundaries</span><span class="p">,</span> <span class="n">axis</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># Shape: (n, 2)</span>
+
+        <span class="c1"># Apply watershed segmentation to the image using the median bottom boundary</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">watershed_coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply_watershed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="p">,</span> <span class="n">bottom_boundary_median</span><span class="p">,</span> <span class="n">make_plot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_intermediate_plots</span><span class="p">)</span>
+
+        <span class="c1"># Clean the boundary coords by removing out-of-bounds values based on mask coordinates</span>
+        <span class="c1"># mask_x = np.any(best_mask, axis=0)  # Check columns (x-values) for non-zero values</span>
+        <span class="c1"># x_min = np.argmax(mask_x)  # First non-zero index</span>
+        <span class="c1"># x_max = len(mask_x) - 1 - np.argmax(mask_x[::-1])  # Last non-zero index</span>
+
+        <span class="c1"># Remove coords outside of the x-min to x-max range</span>
+        <span class="c1"># bottom_boundary_median[(bottom_boundary_median[:, 0] &lt; x_min) | (bottom_boundary_median[:, 0] &gt; x_max), 1] = np.nan</span>
+        <span class="c1"># watershed_coords[(watershed_coords[:, 0] &lt; x_min) | (watershed_coords[:, 0] &gt; x_max), 1] = np.nan</span>
+
+        <span class="c1"># Compute the y-distance and RMSE between the watershed coordinates and the bottom boundary</span>
+        <span class="n">y_distance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_y_distance</span><span class="p">(</span><span class="n">watershed_coords</span><span class="p">,</span> <span class="n">bottom_boundary_median</span><span class="p">)</span>
+        <span class="n">rmse_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_rmse</span><span class="p">(</span><span class="n">watershed_coords</span><span class="p">,</span> <span class="n">bottom_boundary_median</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RMSE: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">rmse_value</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="si">}</span><span class="s2"> pixels&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Clean shoreline coords based on distance threshold</span>
+        <span class="n">shoreline_coords</span> <span class="o">=</span> <span class="n">bottom_boundary_median</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">shoreline_coords</span><span class="p">[</span><span class="n">y_distance</span> <span class="o">&gt;</span> <span class="mi">30</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>  <span class="c1"># Set points beyond 30 pixels to NaN</span>
+
+        <span class="c1"># Plot the image and overlay the shoreline and watershed coords</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">plot_image_and_shoreline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="p">,</span> <span class="n">shoreline_coords</span> <span class="o">=</span> <span class="n">shoreline_coords</span><span class="p">,</span> <span class="n">watershed_coords</span> <span class="o">=</span> <span class="n">watershed_coords</span><span class="p">,</span> <span class="n">y_distance</span> <span class="o">=</span> <span class="n">y_distance</span><span class="p">,</span> <span class="n">save_dir</span> <span class="o">=</span> <span class="s1">&#39;shoreline_plots/&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+        <span class="c1"># Store the results in the datastore</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shoreline_datastore</span><span class="o">.</span><span class="n">store_shoreline_results</span><span class="p">(</span>
+            <span class="n">site</span> <span class="o">=</span> <span class="n">site</span><span class="p">,</span>
+            <span class="n">camera</span> <span class="o">=</span> <span class="n">camera</span><span class="p">,</span>
+            <span class="n">year</span> <span class="o">=</span> <span class="n">year</span><span class="p">,</span>
+            <span class="n">month</span> <span class="o">=</span> <span class="n">month</span><span class="p">,</span>
+            <span class="n">day</span> <span class="o">=</span> <span class="n">day</span><span class="p">,</span>
+            <span class="n">time</span> <span class="o">=</span> <span class="n">time</span><span class="p">,</span>
+            <span class="n">image_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_type</span><span class="p">,</span>
+            <span class="n">shoreline_coords</span> <span class="o">=</span> <span class="n">shoreline_coords</span><span class="p">,</span>
+            <span class="n">bottom_boundary</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">bottom_boundaries</span><span class="p">[</span><span class="mi">0</span><span class="p">][:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">bottom_boundaries</span><span class="p">[</span><span class="mi">0</span><span class="p">][:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">bottom_boundaries</span><span class="p">[</span><span class="mi">1</span><span class="p">][:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">bottom_boundaries</span><span class="p">[</span><span class="mi">2</span><span class="p">][:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">bottom_boundary_median</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]])</span><span class="o">.</span><span class="n">T</span><span class="p">,</span>
+            <span class="n">watershed_coords</span> <span class="o">=</span> <span class="n">watershed_coords</span><span class="p">,</span>
+            <span class="n">y_distance</span> <span class="o">=</span> <span class="n">y_distance</span><span class="p">,</span>
+            <span class="n">rmse_value</span> <span class="o">=</span> <span class="n">rmse_value</span>
+        <span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Bright image processing complete.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shoreline_datastore</span></div>
+
+    
+<div class="viewcode-block" id="ShorelineWorkflow.process_timex">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.process_timex">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_timex</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process a single &#39;timex&#39; image.</span>
+<span class="sd">        </span>
+<span class="sd">        This method follows the workflow specific to &#39;timex&#39; image types. It uses the results from the &#39;bright&#39; image </span>
+<span class="sd">        processing and follows similar steps to the &#39;bright&#39; workflow.</span>
+
+<span class="sd">        :return: (ShorelineDatastore) The updated shoreline datastore after processing the image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Processing timex image: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Extract metadata from the image path</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">sep</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)</span>  <span class="c1"># Extract filename and split by &#39;.&#39;</span>
+
+        <span class="c1"># Ensure that the file has enough parts for extraction</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">9</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;File does not match the expected format: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Extract relevant metadata from the filename</span>
+        <span class="n">month</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>      <span class="c1"># Month</span>
+        <span class="n">day</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">][:</span><span class="mi">2</span><span class="p">]</span>    <span class="c1"># Day of the month</span>
+        <span class="n">time</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">][</span><span class="mi">3</span><span class="p">:]</span>   <span class="c1"># Time (HH_MM)</span>
+        <span class="n">year</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span>       <span class="c1"># Year</span>
+        <span class="n">site</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span>       <span class="c1"># Site CACO#</span>
+        <span class="n">camera</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">7</span><span class="p">]</span>     <span class="c1"># Camera (e.g., &quot;c1&quot;)</span>
+        
+        <span class="c1"># Retrieve corresponding shoreline coords from previously processed &#39;bright&#39; images</span>
+        <span class="n">bright_coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shoreline_datastore</span><span class="o">.</span><span class="n">get_shoreline_coords</span><span class="p">(</span>
+            <span class="n">site</span> <span class="o">=</span> <span class="n">site</span><span class="p">,</span>
+            <span class="n">camera</span> <span class="o">=</span> <span class="n">camera</span><span class="p">,</span>
+            <span class="n">year</span> <span class="o">=</span> <span class="n">year</span><span class="p">,</span>
+            <span class="n">month</span> <span class="o">=</span> <span class="n">month</span><span class="p">,</span>
+            <span class="n">day</span> <span class="o">=</span> <span class="n">day</span><span class="p">,</span>
+            <span class="n">time</span> <span class="o">=</span> <span class="n">time</span><span class="p">,</span>
+            <span class="n">image_type</span> <span class="o">=</span> <span class="s1">&#39;bright&#39;</span>  <span class="c1"># We assume &#39;bright&#39; images have been processed previously</span>
+        <span class="p">)</span>
+        <span class="c1"># Initialize an array to store bottom boundaries</span>
+        <span class="n">bottom_boundaries</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="c1"># Generate random points above the bright boundary</span>
+            <span class="k">if</span> <span class="n">bright_coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">water_coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate_random_coords_above_line</span><span class="p">(</span><span class="n">bright_coords</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">max_range</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span> <span class="n">min_points</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">min_y_offset</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="n">max_y_offset</span> <span class="o">=</span> <span class="mi">350</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">water_coords</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">300</span><span class="p">)]</span>  <span class="c1"># Default coords if no bright data is available</span>
+
+            <span class="c1"># Predict the bottom boundary using SAM model</span>
+            <span class="n">best_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_and_predict_sam_model</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="p">,</span> <span class="n">shoreline_coords</span> <span class="o">=</span> <span class="n">water_coords</span><span class="p">)</span>
+            <span class="n">bottom_boundary</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">extract_bottom_boundary_from_mask</span><span class="p">(</span><span class="n">best_mask</span><span class="p">,</span> <span class="n">make_plot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_intermediate_plots</span><span class="p">,</span> <span class="n">image_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="p">)</span>
+            <span class="n">bottom_boundaries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bottom_boundary</span><span class="p">)</span>
+
+        <span class="c1"># Convert bottom boundaries into a NumPy array and compute the median bottom boundary</span>
+        <span class="n">bottom_boundaries</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">bottom_boundaries</span><span class="p">)</span>
+        <span class="n">bottom_boundary_median</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">median</span><span class="p">(</span><span class="n">bottom_boundaries</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">shoreline_coords</span> <span class="o">=</span> <span class="n">bottom_boundary_median</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="c1"># Apply watershed segmentation using the median bottom boundary</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">watershed_coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply_watershed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="p">,</span> <span class="n">bottom_boundary_median</span><span class="p">,</span> <span class="n">make_plot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_intermediate_plots</span><span class="p">)</span>
+
+        <span class="c1"># Compute y-distance and RMSE if there are valid watershed coordinates</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">watershed_coords</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">y_distance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_y_distance</span><span class="p">(</span><span class="n">watershed_coords</span><span class="p">,</span> <span class="n">shoreline_coords</span><span class="p">)</span>
+            <span class="n">rmse_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_rmse</span><span class="p">(</span><span class="n">watershed_coords</span><span class="p">,</span> <span class="n">shoreline_coords</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RMSE: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">rmse_value</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="si">}</span><span class="s2"> pixels&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Remove coords where y-distance exceeds threshold</span>
+            <span class="n">shoreline_coords</span><span class="p">[</span><span class="n">y_distance</span> <span class="o">&gt;</span> <span class="mi">10</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">rmse_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+            <span class="n">y_distance</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Plot and store results</span>
+        <span class="k">if</span> <span class="n">bright_coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">plot_image_and_shoreline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="p">,</span> <span class="n">shoreline_coords</span> <span class="o">=</span> <span class="n">shoreline_coords</span><span class="p">,</span> <span class="n">watershed_coords</span> <span class="o">=</span> <span class="n">watershed_coords</span><span class="p">,</span> <span class="n">other_coords</span> <span class="o">=</span> <span class="n">bright_coords</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">y_distance</span> <span class="o">=</span> <span class="n">y_distance</span><span class="p">,</span> <span class="n">save_dir</span> <span class="o">=</span> <span class="s1">&#39;shoreline_plots/&#39;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">plot_image_and_shoreline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image_path</span><span class="p">,</span> <span class="n">shoreline_coords</span> <span class="o">=</span> <span class="n">shoreline_coords</span><span class="p">,</span> <span class="n">watershed_coords</span> <span class="o">=</span> <span class="n">watershed_coords</span><span class="p">,</span> <span class="n">y_distance</span> <span class="o">=</span> <span class="n">y_distance</span><span class="p">,</span> <span class="n">save_dir</span> <span class="o">=</span> <span class="s1">&#39;shoreline_plots/&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Store the processed results in the datastore</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shoreline_datastore</span><span class="o">.</span><span class="n">store_shoreline_results</span><span class="p">(</span>
+            <span class="n">site</span> <span class="o">=</span> <span class="n">site</span><span class="p">,</span>
+            <span class="n">camera</span> <span class="o">=</span> <span class="n">camera</span><span class="p">,</span>
+            <span class="n">year</span> <span class="o">=</span> <span class="n">year</span><span class="p">,</span>
+            <span class="n">month</span> <span class="o">=</span> <span class="n">month</span><span class="p">,</span>
+            <span class="n">day</span> <span class="o">=</span> <span class="n">day</span><span class="p">,</span>
+            <span class="n">time</span> <span class="o">=</span> <span class="n">time</span><span class="p">,</span>
+            <span class="n">image_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_type</span><span class="p">,</span>
+            <span class="n">shoreline_coords</span> <span class="o">=</span> <span class="n">shoreline_coords</span><span class="p">,</span>
+            <span class="n">bottom_boundary</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">bottom_boundaries</span><span class="p">[</span><span class="mi">0</span><span class="p">][:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">bottom_boundaries</span><span class="p">[</span><span class="mi">0</span><span class="p">][:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">bottom_boundaries</span><span class="p">[</span><span class="mi">1</span><span class="p">][:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">bottom_boundaries</span><span class="p">[</span><span class="mi">2</span><span class="p">][:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">bottom_boundary_median</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]])</span><span class="o">.</span><span class="n">T</span><span class="p">,</span>
+            <span class="n">watershed_coords</span> <span class="o">=</span> <span class="n">watershed_coords</span><span class="p">,</span>
+            <span class="n">y_distance</span> <span class="o">=</span> <span class="n">y_distance</span><span class="p">,</span>
+            <span class="n">rmse_value</span> <span class="o">=</span> <span class="n">rmse_value</span>
+        <span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Timex image processing complete.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shoreline_datastore</span></div>
+
+
+<div class="viewcode-block" id="ShorelineWorkflow.process_dark">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.process_dark">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_dark</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process a single &#39;dark&#39; image. Placeholder for future implementation.</span>
+
+<span class="sd">        :return: (str) A message indicating that no workflow is available for &#39;dark&#39; image type yet.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s2">&quot;No workflow for dark image type yet. Please select bright or timex.&quot;</span></div>
+
+    
+<div class="viewcode-block" id="ShorelineWorkflow.process_snap">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.process_snap">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_snap</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process a single &#39;snap&#39; image. Placeholder for future implementation.</span>
+
+<span class="sd">        :return: (str) A message indicating that no workflow is available for &#39;snap&#39; image type yet.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s2">&quot;No workflow for snap image type yet. Please select bright or timex.&quot;</span></div>
+
+    
+<div class="viewcode-block" id="ShorelineWorkflow.process_var">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.process_var">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">process_var</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process a single &#39;var&#39; image. Placeholder for future implementation.</span>
+
+<span class="sd">        :return: (str) A message indicating that no workflow is available for &#39;var&#39; image type yet.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s2">&quot;No workflow for var image type yet. Please select bright or timex.&quot;</span></div>
+
+
+    <span class="c1"># Function to extract random coords from the largest connected component (surfzone point)</span>
+<div class="viewcode-block" id="ShorelineWorkflow.find_surfzone_coords">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.find_surfzone_coords">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">find_surfzone_coords</span><span class="p">(</span><span class="n">image_path</span><span class="p">,</span> <span class="n">num_points</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">step</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span> <span class="n">max_attempts</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="n">make_plot</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Extract up to `num_points` random points from the largest connected component in the image</span>
+<span class="sd">        representing the surfzone region (typically the shoreline).</span>
+
+<span class="sd">        :param image_path: (str) Path to the input image.</span>
+<span class="sd">        :param num_points: (int, optional) Number of points to find (default is 5).</span>
+<span class="sd">        :param step: (int, optional) Horizontal step between searches for valid points (default is 200).</span>
+<span class="sd">        :param max_attempts: (int, optional) Maximum number of attempts to find valid points (default is 100).</span>
+<span class="sd">        :param make_plot: (bool, optional) Whether to plot intermediate results (default is False).</span>
+
+<span class="sd">        :return: marker_coords (list of tuples): List of (x, y) coordinates of the marker points.</span>
+<span class="sd">        :return: main_region_mask (np.ndarray): Binary mask of the cleaned region.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Load and preprocess the image (only the first channel as grayscale)</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">image_path</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">IMREAD_COLOR</span><span class="p">)[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># Threshold the image to isolate the surfzone region (assumed to be white)</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">thresholded</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">threshold</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">THRESH_BINARY</span> <span class="o">+</span> <span class="n">cv2</span><span class="o">.</span><span class="n">THRESH_OTSU</span><span class="p">)</span>
+
+        <span class="c1"># Find connected components and select the largest one</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">stats</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">connectedComponentsWithStats</span><span class="p">(</span><span class="n">thresholded</span><span class="p">,</span> <span class="n">connectivity</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+        <span class="n">largest_component_label</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">stats</span><span class="p">[</span><span class="mi">1</span><span class="p">:,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">CC_STAT_AREA</span><span class="p">])</span>
+
+        <span class="c1"># Create a mask for the largest component</span>
+        <span class="n">largest_component_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">labels</span> <span class="o">==</span> <span class="n">largest_component_label</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+
+        <span class="c1"># Clean the mask with morphological operations (open and erode)</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">25</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        <span class="n">cleaned_mask</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">morphologyEx</span><span class="p">(</span><span class="n">largest_component_mask</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">MORPH_OPEN</span><span class="p">,</span> <span class="n">kernel</span><span class="p">)</span>
+        <span class="n">erosion_mask</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">erode</span><span class="p">(</span><span class="n">cleaned_mask</span><span class="p">,</span> <span class="n">kernel</span><span class="p">)</span>
+
+        <span class="c1"># Re-run connected components on the cleaned mask to isolate the largest region</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">stats</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">connectedComponentsWithStats</span><span class="p">(</span><span class="n">erosion_mask</span><span class="p">,</span> <span class="n">connectivity</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+        <span class="n">largest_cleaned_label</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">stats</span><span class="p">[</span><span class="mi">1</span><span class="p">:,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">CC_STAT_AREA</span><span class="p">])</span>
+        <span class="n">main_region_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">labels</span> <span class="o">==</span> <span class="n">largest_cleaned_label</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+
+        <span class="c1"># Initialize the point search process</span>
+        <span class="n">h</span><span class="p">,</span> <span class="n">w</span> <span class="o">=</span> <span class="n">main_region_mask</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">attempts</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">marker_coords</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Retry until enough points are found or max_attempts is reached</span>
+        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">marker_coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">num_points</span> <span class="ow">and</span> <span class="n">attempts</span> <span class="o">&lt;</span> <span class="n">max_attempts</span><span class="p">:</span>
+            <span class="n">marker_coords</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">attempts</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">step</span><span class="p">):</span>
+                <span class="c1"># Find valid y-coordinates within the horizontal range</span>
+                <span class="n">x_range</span> <span class="o">=</span> <span class="n">main_region_mask</span><span class="p">[:,</span> <span class="n">x</span><span class="p">:</span><span class="n">x</span><span class="o">+</span><span class="n">step</span><span class="p">]</span>
+                <span class="n">valid_y</span><span class="p">,</span> <span class="n">valid_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">x_range</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">valid_y</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="c1"># Randomly select a valid point from this range</span>
+                    <span class="n">idx</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">valid_y</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+                    <span class="n">y</span> <span class="o">=</span> <span class="n">valid_y</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+                    <span class="n">x_center</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="n">valid_x</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>  <span class="c1"># Account for offset in x-range</span>
+                    <span class="n">marker_coords</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">x_center</span><span class="p">,</span> <span class="n">y</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">marker_coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">num_points</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to find enough points after </span><span class="si">{</span><span class="n">max_attempts</span><span class="si">}</span><span class="s2"> attempts.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Display the results for visual inspection</span>
+        <span class="k">if</span> <span class="n">make_plot</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span> <span class="o">=</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cmap</span> <span class="o">=</span> <span class="s1">&#39;gray&#39;</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">main_region_mask</span><span class="p">,</span> <span class="n">alpha</span> <span class="o">=</span> <span class="mf">0.3</span><span class="p">)</span>  <span class="c1"># Overlay the mask</span>
+            <span class="k">for</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span> <span class="ow">in</span> <span class="n">marker_coords</span><span class="p">:</span>
+                <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="s1">&#39;ro&#39;</span><span class="p">)</span>  <span class="c1"># Plot marker coords as red circles</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Marker Points Every 200 Pixels with Random Y&#39;</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">marker_coords</span><span class="p">,</span> <span class="n">main_region_mask</span></div>
+
+
+    <span class="c1"># Function to load and predict using SAM model</span>
+<div class="viewcode-block" id="ShorelineWorkflow.load_and_predict_sam_model">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.load_and_predict_sam_model">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load_and_predict_sam_model</span><span class="p">(</span><span class="n">image_path</span><span class="p">,</span> <span class="n">checkpoint_path</span> <span class="o">=</span> <span class="s2">&quot;segment-anything-main/sam_vit_h_4b8939.pth&quot;</span><span class="p">,</span> <span class="n">model_type</span> <span class="o">=</span> <span class="s2">&quot;vit_h&quot;</span><span class="p">,</span> <span class="n">shoreline_coords</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">300</span><span class="p">)],</span> <span class="n">beach_coords</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Loads the SAM model and makes a prediction for a given image.</span>
+
+<span class="sd">        :param image_path: (str) Path to the image to segment.</span>
+<span class="sd">        :param checkpoint_path: (str, optional) Path to the SAM model checkpoint (default is &quot;segment-anything-main/sam_vit_h_4b8939.pth&quot;).</span>
+<span class="sd">        :param model_type: (str, optional) Type of SAM model to use (&quot;vit_b&quot;, &quot;vit_l&quot;, &quot;vit_h&quot;) (default is &quot;vit_h&quot;).</span>
+<span class="sd">        :param shoreline_coords: (list of tuples, optional) List of shoreline coordinates (x, y), used as input points (default is [(1000, 300)]).</span>
+<span class="sd">        :param beach_coords: (list of tuples, optional) Optional list of additional coordinates to help with segmentation (default is None).</span>
+
+<span class="sd">        :return: (np.ndarray) The best mask prediction from the SAM model.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Load the SAM model and set the device (cuda if available)</span>
+        <span class="n">sam</span> <span class="o">=</span> <span class="n">sam_model_registry</span><span class="p">[</span><span class="n">model_type</span><span class="p">](</span><span class="n">checkpoint</span><span class="o">=</span><span class="n">checkpoint_path</span><span class="p">)</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span>
+        <span class="n">sam</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="c1"># Load the image</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">image_path</span><span class="p">))</span>
+
+        <span class="c1"># Prepare the SAM predictor</span>
+        <span class="n">predictor</span> <span class="o">=</span> <span class="n">SamPredictor</span><span class="p">(</span><span class="n">sam</span><span class="p">)</span>
+        <span class="n">predictor</span><span class="o">.</span><span class="n">set_image</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
+
+        <span class="c1"># Prepare the coords and labels for SAM prediction</span>
+        <span class="n">shoreline_point_coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">shoreline_coords</span><span class="p">)</span>
+        <span class="n">shoreline_labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">shoreline_coords</span><span class="p">),</span> <span class="n">dtype</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>  <span class="c1"># All coords are labeled as 1 (foreground)</span>
+
+        <span class="k">if</span> <span class="n">beach_coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">beach_point_coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">beach_coords</span><span class="p">)</span>
+            <span class="n">beach_labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">beach_coords</span><span class="p">),</span> <span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>  <span class="c1"># Label beach coords as 2</span>
+
+            <span class="c1"># Concatenate the coords and labels</span>
+            <span class="n">all_point_coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">shoreline_point_coords</span><span class="p">,</span> <span class="n">beach_point_coords</span><span class="p">),</span> <span class="n">axis</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">all_point_labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">shoreline_labels</span><span class="p">,</span> <span class="n">beach_labels</span><span class="p">),</span> <span class="n">axis</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">all_point_coords</span> <span class="o">=</span> <span class="n">shoreline_point_coords</span>
+            <span class="n">all_point_labels</span> <span class="o">=</span> <span class="n">shoreline_labels</span>
+
+        <span class="c1"># Predict the masks from SAM</span>
+        <span class="n">masks</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">predictor</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span>
+            <span class="n">point_coords</span> <span class="o">=</span> <span class="n">all_point_coords</span><span class="p">,</span>
+            <span class="n">point_labels</span> <span class="o">=</span> <span class="n">all_point_labels</span><span class="p">,</span>
+            <span class="n">multimask_output</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Select the best mask based on the highest score</span>
+        <span class="n">best_mask</span> <span class="o">=</span> <span class="n">masks</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">scores</span><span class="p">)]</span>
+
+        <span class="k">return</span> <span class="n">best_mask</span></div>
+
+
+    <span class="c1"># Function to extract bottom boundary (maximum y-value for each x) from the mask</span>
+<div class="viewcode-block" id="ShorelineWorkflow.extract_bottom_boundary_from_mask">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.extract_bottom_boundary_from_mask">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">extract_bottom_boundary_from_mask</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">make_plot</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">image_path</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Extracts the bottom boundary (maximum y-value for each x) from a binary mask.</span>
+
+<span class="sd">        :param mask: (np.ndarray) The binary mask where 255 represents the object of interest.</span>
+<span class="sd">        :param make_plot: (bool, optional) Whether to plot intermediate results (default is False).</span>
+<span class="sd">        :param image_path: (str, optional) Path to the image to segment (default is &#39;&#39;).</span>
+
+<span class="sd">        :return: (np.ndarray) The bottom boundary as (x, y) coordinates.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Ensure the mask is binary (0 or 255)</span>
+        <span class="n">binary_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">mask</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        <span class="n">mask_width</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        
+        <span class="c1"># Dictionary to store the bottom-most y-coordinate for each x-coordinate</span>
+        <span class="n">bottom_boundary</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="c1"># Loop over each column (x coordinate)</span>
+        <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">binary_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+            <span class="n">y_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">binary_mask</span><span class="p">[:,</span> <span class="n">x</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># y coordinates where the mask is non-zero</span>
+            
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">y_points</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">max_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">y_points</span><span class="p">)</span>
+                <span class="n">bottom_boundary</span><span class="p">[</span><span class="n">x</span><span class="p">]</span> <span class="o">=</span> <span class="n">max_y</span>
+
+        <span class="c1"># Convert the dictionary to a sorted array of (x, y) tuples</span>
+        <span class="n">sorted_bottom_boundary</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">bottom_boundary</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+        <span class="n">bottom_boundary_coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">sorted_bottom_boundary</span><span class="p">)</span>
+
+        <span class="c1"># Interpolate y-coordinates to smooth the bottom boundary</span>
+        <span class="n">new_x_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">mask_width</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">mask_width</span><span class="p">)</span>
+        <span class="n">interpolated_y_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">new_x_points</span><span class="p">,</span> <span class="n">bottom_boundary_coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">bottom_boundary_coords</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span>
+
+        <span class="c1"># Combine the new x and y coordinates to form the interpolated bottom boundary</span>
+        <span class="n">bottom_boundary_coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">((</span><span class="n">new_x_points</span><span class="p">,</span> <span class="n">interpolated_y_points</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">make_plot</span><span class="p">:</span>
+            <span class="c1"># Load the image</span>
+            <span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">image_path</span><span class="p">))</span>
+
+            <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span> <span class="o">=</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">alpha</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">)</span>  <span class="c1"># Original image</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">cmap</span> <span class="o">=</span> <span class="s1">&#39;jet&#39;</span><span class="p">,</span> <span class="n">alpha</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">)</span>  <span class="c1"># Overlay mask with transparency</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">bottom_boundary_coords</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">bottom_boundary_coords</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;black&#39;</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Original Image with Predicted Mask Overlay&quot;</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s2">&quot;off&quot;</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">bottom_boundary_coords</span></div>
+
+
+    <span class="c1"># Function to apply watershed algorithm for shoreline segmentation</span>
+<div class="viewcode-block" id="ShorelineWorkflow.apply_watershed">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.apply_watershed">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">apply_watershed</span><span class="p">(</span><span class="n">image_path</span><span class="p">,</span> <span class="n">bottom_boundary</span><span class="p">,</span> <span class="n">kernel_size</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span> <span class="n">window_size</span> <span class="o">=</span> <span class="mi">25</span><span class="p">,</span> <span class="n">make_plot</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Apply watershed segmentation to clean up the shoreline using the bottom boundary as a marker.</span>
+
+<span class="sd">        :param image_path: (str) Path to the input image.</span>
+<span class="sd">        :param bottom_boundary: (np.ndarray) Extracted bottom boundary coordinates used as markers for the watershed algorithm.</span>
+<span class="sd">        :param kernel_size: (int, optional) Size of the kernel for Gaussian blur (default is 200).</span>
+<span class="sd">        :param window_size: (int, optional) Size of the sliding window to calculate noise (standard deviation) (default is 25).</span>
+<span class="sd">        :param make_plot: (bool, optional) Whether to plot intermediate results (default is False).</span>
+<span class="sd">        </span>
+<span class="sd">        :return: markers (np.ndarray): The segmented image after watershed with marked boundary.</span>
+<span class="sd">        :return: watershed_coords (np.ndarray): Extracted coordinates of the watershed boundary.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Load image</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">image_path</span><span class="p">)</span>
+        
+        <span class="c1"># Initialize markers for watershed segmentation (background is 0)</span>
+        <span class="n">markers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">image</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+        <span class="c1"># Extract x and y coordinates from the bottom boundary</span>
+        <span class="n">bottom_boundary</span> <span class="o">=</span> <span class="n">bottom_boundary</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="n">x_points</span><span class="p">,</span> <span class="n">y_points</span> <span class="o">=</span> <span class="n">bottom_boundary</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">bottom_boundary</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+
+        <span class="c1"># Initialize array for dynamic offsets based on local standard deviation</span>
+        <span class="n">dynamic_offsets</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">y_points</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">y_points</span><span class="p">)):</span>
+            <span class="n">start</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">i</span> <span class="o">-</span> <span class="n">window_size</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="n">end</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">y_points</span><span class="p">),</span> <span class="n">i</span> <span class="o">+</span> <span class="n">window_size</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="n">window</span> <span class="o">=</span> <span class="n">y_points</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+
+            <span class="c1"># Compute local standard deviation (scaled for offset adjustment)</span>
+            <span class="n">local_std</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">window</span><span class="p">))))</span>
+            <span class="n">dynamic_offsets</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="mi">5</span> <span class="o">+</span> <span class="n">local_std</span><span class="p">))</span>  <span class="c1"># Minimum offset of 5</span>
+
+        <span class="c1"># Smooth offsets with a moving average kernel</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">)</span> <span class="o">/</span> <span class="n">kernel_size</span>
+        <span class="n">smoothed_offsets</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">convolve</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span><span class="n">dynamic_offsets</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">//</span><span class="mi">2</span><span class="p">,</span> <span class="n">mode</span> <span class="o">=</span> <span class="s1">&#39;reflect&#39;</span><span class="p">),</span> <span class="n">kernel</span><span class="p">,</span> <span class="n">mode</span> <span class="o">=</span> <span class="s1">&#39;valid&#39;</span><span class="p">)</span>
+        <span class="n">smoothed_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">convolve</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span><span class="n">y_points</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">//</span><span class="mi">2</span><span class="p">,</span> <span class="n">mode</span> <span class="o">=</span> <span class="s1">&#39;reflect&#39;</span><span class="p">),</span> <span class="n">kernel</span><span class="p">,</span> <span class="n">mode</span> <span class="o">=</span> <span class="s1">&#39;valid&#39;</span><span class="p">)</span>
+        <span class="c1">#!!! Should be looked at later</span>
+        <span class="n">smoothed_y</span> <span class="o">=</span> <span class="n">smoothed_y</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">x_points</span><span class="p">)]</span>
+        <span class="n">smoothed_offsets</span> <span class="o">=</span> <span class="n">smoothed_offsets</span><span class="p">[:</span><span class="nb">len</span><span class="p">(</span><span class="n">x_points</span><span class="p">)]</span>
+        <span class="c1"># Generate new smoothed boundary coordinates using dynamic offsets</span>
+        <span class="n">smoothed_bottom_boundary_above</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">((</span><span class="n">x_points</span><span class="p">,</span> <span class="n">smoothed_y</span> <span class="o">-</span> <span class="n">smoothed_offsets</span><span class="p">))</span>
+        <span class="n">smoothed_bottom_boundary_below</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">((</span><span class="n">x_points</span><span class="p">,</span> <span class="n">smoothed_y</span> <span class="o">+</span> <span class="n">smoothed_offsets</span><span class="p">))</span>
+
+        <span class="c1"># Place markers based on the smoothed boundaries</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">x_above</span><span class="p">,</span> <span class="n">y_above</span><span class="p">),</span> <span class="p">(</span><span class="n">x_below</span><span class="p">,</span> <span class="n">y_below</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">smoothed_bottom_boundary_above</span><span class="p">,</span> <span class="n">smoothed_bottom_boundary_below</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">y_above</span> <span class="o">-</span> <span class="mi">10</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">markers</span><span class="p">[:</span><span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">y_above</span><span class="p">)),</span> <span class="nb">int</span><span class="p">(</span><span class="n">x_above</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c1"># Water marker (above boundary)</span>
+            <span class="k">if</span> <span class="n">y_below</span> <span class="o">+</span> <span class="mi">10</span> <span class="o">&lt;</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+                <span class="n">markers</span><span class="p">[</span><span class="nb">min</span><span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">y_below</span><span class="p">)):,</span> <span class="nb">int</span><span class="p">(</span><span class="n">x_below</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># Sand marker (below boundary)</span>
+
+        <span class="c1"># Apply distance transform to the markers</span>
+        <span class="n">dist_transform</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">distanceTransform</span><span class="p">(</span><span class="n">cv2</span><span class="o">.</span><span class="n">bitwise_not</span><span class="p">(</span><span class="n">markers</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)),</span> <span class="n">cv2</span><span class="o">.</span><span class="n">DIST_L2</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">thresh</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">threshold</span><span class="p">(</span><span class="n">dist_transform</span><span class="p">,</span> <span class="mf">0.7</span> <span class="o">*</span> <span class="n">dist_transform</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># Apply watershed algorithm</span>
+        <span class="n">markers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">(</span><span class="n">markers</span><span class="p">)</span>
+        <span class="n">markers</span><span class="p">[</span><span class="n">thresh</span> <span class="o">==</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>  <span class="c1"># Mark unknown areas as -1</span>
+        <span class="n">markers</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">watershed</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">markers</span><span class="p">)</span>
+
+        <span class="c1"># Remove boundaries from the borders</span>
+        <span class="n">markers</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">markers</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:],</span> <span class="n">markers</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">markers</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span>
+        
+        <span class="c1"># Extract watershed boundary coordinates</span>
+        <span class="n">y_points</span><span class="p">,</span> <span class="n">x_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">markers</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Extract and sort boundary coordinates</span>
+        <span class="n">boundary_coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">((</span><span class="n">x_points</span><span class="p">,</span> <span class="n">y_points</span><span class="p">))</span>
+        <span class="n">sorted_boundary_coords</span> <span class="o">=</span> <span class="n">boundary_coords</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">boundary_coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])]</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">unique_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">sorted_boundary_coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">return_index</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">unique_boundary_coords</span> <span class="o">=</span> <span class="n">sorted_boundary_coords</span><span class="p">[</span><span class="n">unique_indices</span><span class="p">]</span>
+
+        <span class="c1"># Ensure a consistent format for the output coordinates</span>
+        <span class="n">unique_x_points</span><span class="p">,</span> <span class="n">unique_y_points</span> <span class="o">=</span> <span class="n">unique_boundary_coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">unique_boundary_coords</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">unique_x_points</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">unique_x_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(([</span><span class="mi">0</span><span class="p">],</span> <span class="n">unique_x_points</span><span class="p">,</span> <span class="p">[</span><span class="n">unique_x_points</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]))</span>
+            <span class="n">unique_y_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(([</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">],</span> <span class="n">unique_y_points</span><span class="p">,</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">]))</span>
+
+        <span class="n">watershed_coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">((</span><span class="n">unique_x_points</span><span class="p">,</span> <span class="n">unique_y_points</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">make_plot</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span> <span class="o">=</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cmap</span> <span class="o">=</span> <span class="s1">&#39;gray&#39;</span><span class="p">)</span>
+            <span class="c1"># Visualize watershed boundaries in red</span>
+            <span class="n">image</span><span class="p">[</span><span class="n">markers</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">]</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">alpha</span> <span class="o">=</span> <span class="mf">0.3</span><span class="p">)</span>  <span class="c1"># Overlay the mask</span>
+            <span class="k">for</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span> <span class="ow">in</span> <span class="n">watershed_coords</span><span class="p">:</span>
+                <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="s1">&#39;ro&#39;</span><span class="p">)</span>  <span class="c1"># Plot marker coords as red circles</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Watershed Algorithm&#39;</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">markers</span><span class="p">,</span> <span class="n">watershed_coords</span></div>
+
+
+<div class="viewcode-block" id="ShorelineWorkflow.resample_to_boundary">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.resample_to_boundary">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">resample_to_boundary</span><span class="p">(</span><span class="n">coords_1</span><span class="p">,</span> <span class="n">coords_2</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Resample coordinates from one set to match the length and shape of another using linear interpolation.</span>
+<span class="sd">        </span>
+<span class="sd">        :param coords_1: (np.ndarray) First set of coordinates (e.g., watershed boundary).</span>
+<span class="sd">        :param coords_2: (np.ndarray) Second set of coordinates (e.g., bottom boundary).</span>
+<span class="sd">            </span>
+<span class="sd">        :return: (np.ndarray) Resampled coordinates with the same length as the second set.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Convert to numpy arrays if necessary</span>
+        <span class="n">coords_1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">coords_1</span><span class="p">)</span>
+        <span class="n">coords_2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">coords_2</span><span class="p">)</span>
+        
+        <span class="c1"># Linear interpolation for x and y coordinates</span>
+        <span class="n">x_interp</span> <span class="o">=</span> <span class="n">interpolate</span><span class="o">.</span><span class="n">interp1d</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords_1</span><span class="p">)),</span> <span class="n">coords_1</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">kind</span> <span class="o">=</span> <span class="s1">&#39;linear&#39;</span><span class="p">,</span> <span class="n">fill_value</span> <span class="o">=</span> <span class="s2">&quot;extrapolate&quot;</span><span class="p">)</span>
+        <span class="n">y_interp</span> <span class="o">=</span> <span class="n">interpolate</span><span class="o">.</span><span class="n">interp1d</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords_1</span><span class="p">)),</span> <span class="n">coords_1</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">kind</span> <span class="o">=</span> <span class="s1">&#39;linear&#39;</span><span class="p">,</span> <span class="n">fill_value</span> <span class="o">=</span> <span class="s2">&quot;extrapolate&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Resample the coordinates to match the second set&#39;s length</span>
+        <span class="n">resampled_x</span> <span class="o">=</span> <span class="n">x_interp</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords_2</span><span class="p">)))</span>
+        <span class="n">resampled_y</span> <span class="o">=</span> <span class="n">y_interp</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords_2</span><span class="p">)))</span>
+        
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">((</span><span class="n">resampled_x</span><span class="p">,</span> <span class="n">resampled_y</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="ShorelineWorkflow.compute_rmse">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.compute_rmse">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_rmse</span><span class="p">(</span><span class="n">coords_1</span><span class="p">,</span> <span class="n">coords_2</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute the RMSE (Root Mean Squared Error) between two sets of coordinates.</span>
+<span class="sd">        </span>
+<span class="sd">        :param coords_1: (np.ndarray) First set of coordinates (e.g., watershed coordinates).</span>
+<span class="sd">        :param coords_2: (np.ndarray) Second set of coordinates (e.g., bottom boundary).</span>
+<span class="sd">            </span>
+<span class="sd">        :return: (float) The RMSE value between the two sets of coordinates, or None if there are issues with the input.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Check if both coordinates are 2D and have shape (n, 2)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords_1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords_2</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">coords_1</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">coords_2</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">coords_1</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">coords_2</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Both coords_1 and coords_2 should be 2D arrays with shape (n, 2).&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># Resample coords_1 to match coords_2&#39;s shape/length</span>
+        <span class="n">resampled_coords_1</span> <span class="o">=</span> <span class="n">ShorelineWorkflow</span><span class="o">.</span><span class="n">resample_to_boundary</span><span class="p">(</span><span class="n">coords_1</span><span class="p">,</span> <span class="n">coords_2</span><span class="p">)</span>
+        
+        <span class="c1"># Ensure both coordinates are numpy arrays (2D with x, y coordinates)</span>
+        <span class="n">coords_1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">resampled_coords_1</span><span class="p">)</span>
+        <span class="n">coords_2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">coords_2</span><span class="p">)</span>
+        
+        <span class="c1"># Ensure both have the same length after resampling</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords_1</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords_2</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;The number of points in coords_1 and coords_2 must be the same after resampling.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        
+        <span class="c1"># Identify the valid (non-NaN) entries</span>
+        <span class="n">valid_mask</span> <span class="o">=</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">coords_1</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">coords_1</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">coords_2</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">coords_2</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span>
+
+        <span class="c1"># Filter out NaN values from both arrays using the valid mask</span>
+        <span class="n">coords_1</span> <span class="o">=</span> <span class="n">coords_1</span><span class="p">[</span><span class="n">valid_mask</span><span class="p">]</span>
+        <span class="n">coords_2</span> <span class="o">=</span> <span class="n">coords_2</span><span class="p">[</span><span class="n">valid_mask</span><span class="p">]</span>
+
+        <span class="c1"># Ensure there are valid data points left</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords_1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;No valid data points left after filtering NaNs.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># Calculate the squared differences between corresponding points</span>
+        <span class="n">diff</span> <span class="o">=</span> <span class="n">coords_1</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">coords_2</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">squared_diff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">diff</span><span class="p">)</span>
+        
+        <span class="c1"># Calculate the mean squared error (MSE) for both x and y coordinates</span>
+        <span class="n">mse</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">squared_diff</span><span class="p">)</span>
+        
+        <span class="c1"># Calculate RMSE (root of MSE)</span>
+        <span class="n">rmse</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">mse</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">rmse</span></div>
+
+
+<div class="viewcode-block" id="ShorelineWorkflow.compute_y_distance">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.compute_y_distance">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_y_distance</span><span class="p">(</span><span class="n">coords_1</span><span class="p">,</span> <span class="n">coords_2</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute the distance between the y-values of two sets of coordinates for each x-coordinate.</span>
+<span class="sd">        </span>
+<span class="sd">        :param coords_1: (np.ndarray) First set of coordinates (e.g., watershed boundary).</span>
+<span class="sd">        :param coords_2: (np.ndarray) Second set of coordinates (e.g., bottom boundary).</span>
+<span class="sd">            </span>
+<span class="sd">        :return: (np.ndarray) An array of distances between the y-values of the two coordinate sets.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Resample coords_1 to match coords_2</span>
+        <span class="n">resampled_coords_1</span> <span class="o">=</span> <span class="n">ShorelineWorkflow</span><span class="o">.</span><span class="n">resample_to_boundary</span><span class="p">(</span><span class="n">coords_1</span><span class="p">,</span> <span class="n">coords_2</span><span class="p">)</span>
+        
+        <span class="c1"># Calculate the absolute differences in y-values</span>
+        <span class="n">y_distance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">resampled_coords_1</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">coords_2</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span>
+        
+        <span class="k">return</span> <span class="n">y_distance</span></div>
+
+
+<div class="viewcode-block" id="ShorelineWorkflow.generate_random_coords_above_line">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.generate_random_coords_above_line">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">generate_random_coords_above_line</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">max_range</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span> <span class="n">min_points</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">min_y_offset</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="n">max_y_offset</span> <span class="o">=</span> <span class="mi">200</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Generate random coords above a line, with random x-values within dynamically determined intervals.</span>
+
+<span class="sd">        :param coords: (np.ndarray or list) (x, y) coords defining the line.</span>
+<span class="sd">        :param max_range: (int, optional) Maximum range between x-values for each interval. Default is 200.</span>
+<span class="sd">        :param min_points: (int, optional) Minimum number of intervals (or points) to generate. Default is 5.</span>
+<span class="sd">        :param min_y_offset: (int, optional) Minimum y-offset to sample above the line. Default is 100.</span>
+<span class="sd">        :param max_y_offset: (int, optional) Maximum y-offset to sample above the line. Default is 200.</span>
+<span class="sd">            </span>
+<span class="sd">        :return: (list) List of (x, y) tuples representing the random coords above the line.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Extract x and y values from the line coords</span>
+        <span class="n">x_values</span> <span class="o">=</span> <span class="n">coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>  <span class="c1"># x-coordinates of the line</span>
+        <span class="n">y_values</span> <span class="o">=</span> <span class="n">coords</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>  <span class="c1"># y-coordinates of the line</span>
+
+        <span class="c1"># Create a dictionary for fast lookup of y-values for given x-values</span>
+        <span class="n">line_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">x_values</span><span class="p">,</span> <span class="n">y_values</span><span class="p">))</span>
+
+        <span class="n">random_coords</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Determine the total x-range from the line&#39;s x-values</span>
+        <span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">x_values</span><span class="p">)),</span> <span class="nb">int</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">x_values</span><span class="p">))</span>
+
+        <span class="c1"># Calculate the number of intervals based on max_range (with a minimum of one interval)</span>
+        <span class="n">num_intervals</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_max</span> <span class="o">-</span> <span class="n">x_min</span><span class="p">)</span> <span class="o">//</span> <span class="n">max_range</span>
+        <span class="n">num_intervals</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_intervals</span><span class="p">)</span>  <span class="c1"># Ensure at least one interval</span>
+        
+        <span class="c1"># Ensure there are at least &#39;min_points&#39; intervals</span>
+        <span class="k">if</span> <span class="n">num_intervals</span> <span class="o">&lt;</span> <span class="n">min_points</span><span class="p">:</span>
+            <span class="n">num_intervals</span> <span class="o">=</span> <span class="n">min_points</span>
+
+        <span class="c1"># Calculate the width of each interval</span>
+        <span class="n">interval_width</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_max</span> <span class="o">-</span> <span class="n">x_min</span><span class="p">)</span> <span class="o">/</span> <span class="n">num_intervals</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_intervals</span><span class="p">):</span>
+            <span class="c1"># Determine the x-range for the current interval</span>
+            <span class="n">interval_start</span> <span class="o">=</span> <span class="n">x_min</span> <span class="o">+</span> <span class="n">i</span> <span class="o">*</span> <span class="n">interval_width</span>
+            <span class="n">interval_end</span> <span class="o">=</span> <span class="n">x_min</span> <span class="o">+</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">interval_width</span>
+            
+            <span class="c1"># Ensure we don&#39;t exceed the overall range</span>
+            <span class="k">if</span> <span class="n">interval_end</span> <span class="o">&gt;</span> <span class="n">x_max</span><span class="p">:</span>
+                <span class="n">interval_end</span> <span class="o">=</span> <span class="n">x_max</span>
+            
+            <span class="c1"># Randomly pick an x-value within the current interval</span>
+            <span class="n">x_random</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">interval_start</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">interval_end</span><span class="p">))</span>
+
+            <span class="c1"># Find the closest x-value from the line to use for y-value</span>
+            <span class="n">closest_x</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">x_values</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="nb">abs</span><span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">x_random</span><span class="p">))</span>
+            <span class="n">y_on_line</span> <span class="o">=</span> <span class="n">line_dict</span><span class="p">[</span><span class="n">closest_x</span><span class="p">]</span>
+            
+            <span class="c1"># Add a random offset to the y-value to place the point above the line</span>
+            <span class="n">y_offset</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="n">min_y_offset</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">max_y_offset</span><span class="p">,</span> <span class="n">y_on_line</span><span class="p">))</span>  <span class="c1"># Offset above the line</span>
+            <span class="n">y_random</span> <span class="o">=</span> <span class="n">y_on_line</span> <span class="o">-</span> <span class="n">y_offset</span>
+            
+            <span class="c1"># Store the randomly generated point (x_random, y_random)</span>
+            <span class="n">random_coords</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">x_random</span><span class="p">,</span> <span class="n">y_random</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">random_coords</span></div>
+
+
+<div class="viewcode-block" id="ShorelineWorkflow.plot_image_and_shoreline">
+<a class="viewcode-back" href="../modules.html#c_Workflow.ShorelineWorkflow.plot_image_and_shoreline">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">plot_image_and_shoreline</span><span class="p">(</span><span class="n">image_path</span><span class="p">,</span> <span class="n">shoreline_coords</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">watershed_coords</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">other_coords</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">y_distance</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">save_dir</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plot the image with the bottom boundary and the watershed fitted shoreline.</span>
+<span class="sd">    </span>
+<span class="sd">    :param image_path: (str) The path to the image.</span>
+<span class="sd">    :param shoreline_coords: (np.ndarray, optional) The extracted bottom boundary coords to plot (default is None).</span>
+<span class="sd">    :param watershed_coords: (np.ndarray, optional) The extracted watershed boundary coords to plot (default is None).</span>
+<span class="sd">    :param other_coords: (np.ndarray, optional) Any other set of coordinates to plot (default is None).</span>
+<span class="sd">    :param y_distance: (np.ndarray, optional) The y-distance to plot on a secondary y-axis (default is None).</span>
+<span class="sd">    :param save_dir: (str, optional) Directory to save the plot (default is None, meaning the plot will be displayed but not saved).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="c1"># Read the image</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">image_path</span><span class="p">)</span>
+        <span class="n">image_rgb</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2RGB</span><span class="p">)</span>
+
+        <span class="c1"># Create the figure</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax1</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+
+        <span class="c1"># Plot the image on the first axis</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image_rgb</span><span class="p">)</span>
+        
+        <span class="c1"># Plot the bottom boundary and watershed coordinates</span>
+        <span class="k">if</span> <span class="n">other_coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">other_coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">other_coords</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;k&#39;</span><span class="p">,</span> <span class="n">label</span> <span class="o">=</span> <span class="s1">&#39;Another Boundary&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">watershed_coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">watershed_coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">watershed_coords</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="n">label</span> <span class="o">=</span> <span class="s1">&#39;Watershed Boundary&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">shoreline_coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ax1</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">shoreline_coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">shoreline_coords</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;g&#39;</span><span class="p">,</span> <span class="n">label</span> <span class="o">=</span> <span class="s1">&#39;Bottom Boundary (SAM)&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># Create the secondary y-axis for y_distance</span>
+        <span class="n">ax2</span> <span class="o">=</span> <span class="n">ax1</span><span class="o">.</span><span class="n">twinx</span><span class="p">()</span>
+        <span class="c1"># Compute RMSE if both boundaries are provided</span>
+        <span class="n">rmse_value</span> <span class="o">=</span> <span class="n">ShorelineWorkflow</span><span class="o">.</span><span class="n">compute_rmse</span><span class="p">(</span><span class="n">watershed_coords</span><span class="p">,</span> <span class="n">shoreline_coords</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">rmse_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">lb</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;Y Distance (RMSE = </span><span class="si">{</span><span class="n">rmse_value</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1"> pixels)&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">lb</span> <span class="o">=</span> <span class="s1">&#39;Y Distance&#39;</span>
+        
+        <span class="c1"># Plot y_distance if available</span>
+        <span class="k">if</span> <span class="n">y_distance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ax2</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">shoreline_coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">y_distance</span><span class="p">,</span> <span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="n">label</span> <span class="o">=</span> <span class="n">lb</span><span class="p">,</span> <span class="n">linestyle</span> <span class="o">=</span> <span class="s1">&#39;--&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># Set axis labels and title</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;X Coordinates&#39;</span><span class="p">)</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Y Coordinates&#39;</span><span class="p">,</span> <span class="n">color</span> <span class="o">=</span> <span class="s1">&#39;black&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Y Distance&#39;</span><span class="p">,</span> <span class="n">color</span> <span class="o">=</span> <span class="s1">&#39;blue&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Set the limits of the y-axes</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># Reverse y-axis to match image orientation</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">50</span><span class="p">)</span> <span class="c1"># Set y-distance limits</span>
+
+        <span class="c1"># Set the aspect ratio to auto for better visualization</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s1">&#39;auto&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Add legends for both axes</span>
+        <span class="n">ax1</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span> <span class="o">=</span> <span class="s1">&#39;upper left&#39;</span><span class="p">)</span>
+        <span class="n">ax2</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span> <span class="o">=</span> <span class="s1">&#39;upper right&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Title</span>
+        <span class="c1"># Extract metadata from the image path</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="n">image_path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">sep</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)</span>  <span class="c1"># Extract filename and split by &#39;.&#39;</span>
+
+        <span class="c1"># Ensure that the file has enough parts for extraction</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">9</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;File does not match the expected format: </span><span class="si">{</span><span class="n">image_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Extract relevant metadata from the filename</span>
+        <span class="n">month</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>      <span class="c1"># Month</span>
+        <span class="n">day</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">][:</span><span class="mi">2</span><span class="p">]</span>    <span class="c1"># Day of the month</span>
+        <span class="n">time</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">][</span><span class="mi">3</span><span class="p">:]</span>   <span class="c1"># Time (HH_MM)</span>
+        <span class="n">year</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span>       <span class="c1"># Year</span>
+        <span class="n">site</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span>       <span class="c1"># Site CACO#</span>
+        <span class="n">camera</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">7</span><span class="p">]</span>     <span class="c1"># Camera (e.g., &quot;c1&quot;)</span>
+        <span class="n">image_type</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">8</span><span class="p">]</span>  <span class="c1"># Image type (e.g., &quot;bright&quot;, &quot;dark&quot;, &quot;timex&quot;, &quot;snap&quot;)</span>
+
+        <span class="n">file_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">site</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">camera</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">year</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">month</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">day</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">time</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">image_type</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">title</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Shoreline and Watershed - </span><span class="si">{</span><span class="n">file_name</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="n">title</span><span class="p">)</span>
+    
+        <span class="c1"># Optionally save the plot to the specified directory</span>
+        <span class="k">if</span> <span class="n">save_dir</span><span class="p">:</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">save_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">output_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">save_dir</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">file_name</span><span class="si">}</span><span class="s2">_shoreline_plot.png&quot;</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">output_file</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Figure saved to </span><span class="si">{</span><span class="n">output_file</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Show the plot</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Athina MZ Lange.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

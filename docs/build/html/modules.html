@@ -1,0 +1,875 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShoreScan Package &mdash; ShoreScan 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=2709fde1"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Processing Methods" href="methodology.html" />
+    <link rel="prev" title="ShoreScan documentation" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ShoreScan
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">ShoreScan Package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#datastore-module">Datastore Module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#c_Datastore.ImageDatastore"><code class="docutils literal notranslate"><span class="pre">ImageDatastore</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.images"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.images</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.camera_sites"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.camera_sites</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.copy_images_to_folder"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.copy_images_to_folder()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.filter_black_images"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.filter_black_images()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.filter_blurry_images"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.filter_blurry_images()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.filter_sun_glare"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.filter_sun_glare()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.filter_white_images"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.filter_white_images()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.get_image_metadata_by_type"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.get_image_metadata_by_type()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.image_stats"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.image_stats()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.list_images"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.list_images()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.load_camera_sites"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.load_camera_sites()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.load_images"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.load_images()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.plot_image"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.plot_image()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ImageDatastore.select_folder"><code class="docutils literal notranslate"><span class="pre">ImageDatastore.select_folder()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#c_Datastore.ShorelineDatastore"><code class="docutils literal notranslate"><span class="pre">ShorelineDatastore</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ShorelineDatastore.results"><code class="docutils literal notranslate"><span class="pre">ShorelineDatastore.results</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ShorelineDatastore.get_shoreline_coords"><code class="docutils literal notranslate"><span class="pre">ShorelineDatastore.get_shoreline_coords()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ShorelineDatastore.get_shoreline_results"><code class="docutils literal notranslate"><span class="pre">ShorelineDatastore.get_shoreline_results()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ShorelineDatastore.save_shoreline_coords_to_file"><code class="docutils literal notranslate"><span class="pre">ShorelineDatastore.save_shoreline_coords_to_file()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Datastore.ShorelineDatastore.store_shoreline_results"><code class="docutils literal notranslate"><span class="pre">ShorelineDatastore.store_shoreline_results()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#workflow-module">Workflow Module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.shoreline_datastore"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.shoreline_datastore</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.apply_watershed"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.apply_watershed()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.compute_rmse"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.compute_rmse()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.compute_y_distance"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.compute_y_distance()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.extract_bottom_boundary_from_mask"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.extract_bottom_boundary_from_mask()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.find_surfzone_coords"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.find_surfzone_coords()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.generate_random_coords_above_line"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.generate_random_coords_above_line()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.load_and_predict_sam_model"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.load_and_predict_sam_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.plot_image_and_shoreline"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.plot_image_and_shoreline()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.process"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.process()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.process_bright"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.process_bright()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.process_dark"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.process_dark()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.process_snap"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.process_snap()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.process_timex"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.process_timex()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.process_var"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.process_var()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c_Workflow.ShorelineWorkflow.resample_to_boundary"><code class="docutils literal notranslate"><span class="pre">ShorelineWorkflow.resample_to_boundary()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#utils-module">utils Module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#utils.check_processed_images"><code class="docutils literal notranslate"><span class="pre">check_processed_images()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#utils.create_video_from_images"><code class="docutils literal notranslate"><span class="pre">create_video_from_images()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#utils.process_images"><code class="docutils literal notranslate"><span class="pre">process_images()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#utils.remove_processed_images"><code class="docutils literal notranslate"><span class="pre">remove_processed_images()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="methodology.html">Processing Methods</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ShoreScan</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">ShoreScan Package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/modules.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-c_Datastore">
+<span id="shorescan-package"></span><h1>ShoreScan Package<a class="headerlink" href="#module-c_Datastore" title="Link to this heading"></a></h1>
+<section id="datastore-module">
+<h2>Datastore Module<a class="headerlink" href="#datastore-module" title="Link to this heading"></a></h2>
+<p>This module provides datastore classes to store, retrieve, and manage standard ARGUS products
+and computed shoreline results for various sites and cameras.
+It supports hierarchical storage and exporting of data.</p>
+<dl class="simple">
+<dt>Classes:</dt><dd><ul class="simple">
+<li><p>ImageDatastore: Main class for managing ARGUS-style imagery data.</p></li>
+<li><p>ShorelineDatastore: Main class for managing shoreline-related data.</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<dl class="py class">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">c_Datastore.</span></span><span class="sig-name descname"><span class="pre">ImageDatastore</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root_folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ImageDatastore"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ImageDatastore" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A class to manage and process image data stored in a hierarchical folder structure.</p>
+<p>This class handles storing metadata for images in a nested dictionary structure,
+allows for image selection, loading, and organizing images based on metadata,
+and provides methods for filtering and plotting images.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.images">
+<span class="sig-name descname"><span class="pre">images</span></span><a class="headerlink" href="#c_Datastore.ImageDatastore.images" title="Link to this definition"></a></dt>
+<dd><p>A nested dictionary structure storing image metadata.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.camera_sites">
+<span class="sig-name descname"><span class="pre">camera_sites</span></span><a class="headerlink" href="#c_Datastore.ImageDatastore.camera_sites" title="Link to this definition"></a></dt>
+<dd><p>A dictionary mapping sites to their associated cameras.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.copy_images_to_folder">
+<span class="sig-name descname"><span class="pre">copy_images_to_folder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination_folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hierarchical</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ImageDatastore.copy_images_to_folder"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ImageDatastore.copy_images_to_folder" title="Link to this definition"></a></dt>
+<dd><p>Copies all images from the datastore to the specified destination folder.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>destination_folder</strong> – (str, optional) The path to the destination folder where images will be copied. If None, uses the original directory.</p></li>
+<li><p><strong>hierarchical</strong> – (bool) If True, organizes images into subfolders by site, camera, year, month, and image type. If False, all images are copied to a single folder.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If the destination folder is not specified or invalid (when not saving to the original folder).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.filter_black_images">
+<span class="sig-name descname"><span class="pre">filter_black_images</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ImageDatastore.filter_black_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ImageDatastore.filter_black_images" title="Link to this definition"></a></dt>
+<dd><p>Remove images from the datastore that are too dark.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>threshold</strong> – (int) The brightness threshold below which images are considered “too dark”.</p></li>
+<li><p><strong>image_type</strong> – (str, optional) If specified, only filter images of this type (e.g., ‘bright’, ‘snap’).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(list) A list of metadata for the removed images.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.filter_blurry_images">
+<span class="sig-name descname"><span class="pre">filter_blurry_images</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">blur_thresholds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ImageDatastore.filter_blurry_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ImageDatastore.filter_blurry_images" title="Link to this definition"></a></dt>
+<dd><p>Remove blurry images from the datastore.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blur_thresholds</strong> – (dict, optional) A dictionary where keys are image types
+(e.g., ‘bright’, ‘snap’) and values are the Laplacian variance thresholds below
+which images are considered blurry. If not provided, the default threshold will be used.</p></li>
+<li><p><strong>image_type</strong> – (str, optional) If specified, only filter images of this type (e.g., ‘bright’, ‘snap’).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(list) A list of metadata for the removed images.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.filter_sun_glare">
+<span class="sig-name descname"><span class="pre">filter_sun_glare</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">csv_file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'camera_sites.csv'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ImageDatastore.filter_sun_glare"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ImageDatastore.filter_sun_glare" title="Link to this definition"></a></dt>
+<dd><p>Check for potential sun glare in images.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>threshold</strong> – (int) The angle in degrees above which the image will be considered to have sun glare.</p></li>
+<li><p><strong>image_type</strong> – (str, optional) If specified, only check images of this type (e.g., ‘bright’, ‘snap’).</p></li>
+<li><p><strong>csv_file</strong> – (str) The path to the CSV file containing camera site data.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(list) A list of metadata for the removed images.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.filter_white_images">
+<span class="sig-name descname"><span class="pre">filter_white_images</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ImageDatastore.filter_white_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ImageDatastore.filter_white_images" title="Link to this definition"></a></dt>
+<dd><p>Remove images from the datastore that are too bright.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>threshold</strong> – (int) The brightness threshold above which images are considered “too bright”.</p></li>
+<li><p><strong>image_type</strong> – (str, optional) If specified, only filter images of this type (e.g., ‘bright’, ‘snap’).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(list) A list of metadata for the removed images.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.get_image_metadata_by_type">
+<span class="sig-name descname"><span class="pre">get_image_metadata_by_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_types</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">site</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">camera</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ImageDatastore.get_image_metadata_by_type"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ImageDatastore.get_image_metadata_by_type" title="Link to this definition"></a></dt>
+<dd><p>Extract metadata for all specified image types, optionally filtering by site and camera.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image_types</strong> – (list) A list of image types (e.g., [‘bright’, ‘snap’]).</p></li>
+<li><p><strong>site</strong> – (str, optional) The site to filter by. If not provided, all sites are considered.</p></li>
+<li><p><strong>camera</strong> – (str, optional) The camera to filter by. If not provided, all cameras are considered.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(list) A list of metadata dictionaries for the specified image types, site, and camera.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.image_stats">
+<span class="sig-name descname"><span class="pre">image_stats</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ImageDatastore.image_stats"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ImageDatastore.image_stats" title="Link to this definition"></a></dt>
+<dd><p>Displays statistics about the images stored in the datastore.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.list_images">
+<span class="sig-name descname"><span class="pre">list_images</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">site</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">camera</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">year</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">month</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ImageDatastore.list_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ImageDatastore.list_images" title="Link to this definition"></a></dt>
+<dd><p>Lists images optionally filtered by site, camera, year, and month.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>site</strong> – (str, optional) The site identifier to filter by.</p></li>
+<li><p><strong>camera</strong> – (str, optional) The camera identifier to filter by.</p></li>
+<li><p><strong>year</strong> – (str, optional) The year to filter by.</p></li>
+<li><p><strong>month</strong> – (str, optional) The month to filter by.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(dict) A filtered list of images.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.load_camera_sites">
+<span class="sig-name descname"><span class="pre">load_camera_sites</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">csv_file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'camera_sites.csv'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ImageDatastore.load_camera_sites"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ImageDatastore.load_camera_sites" title="Link to this definition"></a></dt>
+<dd><p>Load camera sites data (lat, lon, and camera angle) from a CSV file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>csv_file</strong> – (str, optional) The path to the CSV file containing camera site data.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict: (dict) A dictionary with site names as keys and tuples (lat, lon, camera_angle) as values.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If the data in the CSV file is invalid or incomplete.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.load_images">
+<span class="sig-name descname"><span class="pre">load_images</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ImageDatastore.load_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ImageDatastore.load_images" title="Link to this definition"></a></dt>
+<dd><p>Loads images from the root folder and stores metadata in the images attribute.</p>
+<p>This method parses the filenames and stores metadata such as timestamp, site, camera, and image type.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If a file does not conform to the expected format.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.plot_image">
+<span class="sig-name descname"><span class="pre">plot_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_metadata</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ImageDatastore.plot_image"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ImageDatastore.plot_image" title="Link to this definition"></a></dt>
+<dd><p>Plot a single image using its metadata dictionary.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>image_metadata</strong> – (dict) A dictionary containing the image’s metadata.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ImageDatastore.select_folder">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">select_folder</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ImageDatastore.select_folder"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ImageDatastore.select_folder" title="Link to this definition"></a></dt>
+<dd><p>Opens a dialog to select a folder and returns the selected path.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(str) The path to the selected folder.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>RuntimeError</strong> – If folder selection fails.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="c_Datastore.ShorelineDatastore">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">c_Datastore.</span></span><span class="sig-name descname"><span class="pre">ShorelineDatastore</span></span><a class="reference internal" href="_modules/c_Datastore.html#ShorelineDatastore"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ShorelineDatastore" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A class to manage shoreline data using a nested dictionary structure.</p>
+<p>This class supports hierarchical storage, retrieval, and export of shoreline
+results including error metrics.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="c_Datastore.ShorelineDatastore.results">
+<span class="sig-name descname"><span class="pre">results</span></span><a class="headerlink" href="#c_Datastore.ShorelineDatastore.results" title="Link to this definition"></a></dt>
+<dd><p>A nested dictionary to store shoreline-related data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>defaultdict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ShorelineDatastore.get_shoreline_coords">
+<span class="sig-name descname"><span class="pre">get_shoreline_coords</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">site</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">camera</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">year</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">month</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">day</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_type</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ShorelineDatastore.get_shoreline_coords"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ShorelineDatastore.get_shoreline_coords" title="Link to this definition"></a></dt>
+<dd><p>Retrieve all filtered bottom boundaries for a given image.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>site</strong> – (str) The site identifier.</p></li>
+<li><p><strong>camera</strong> – (str) The camera identifier.</p></li>
+<li><p><strong>year</strong> – (str) The year of the image.</p></li>
+<li><p><strong>month</strong> – (str) The month of the image.</p></li>
+<li><p><strong>day</strong> – (str) The day of the image.</p></li>
+<li><p><strong>time</strong> – (str) The time of the image.</p></li>
+<li><p><strong>image_type</strong> – (str) The type of the image (e.g., ‘bright’).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(list) A list of all shoreline coords for the given image.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ShorelineDatastore.get_shoreline_results">
+<span class="sig-name descname"><span class="pre">get_shoreline_results</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">site</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">camera</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">year</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">month</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">day</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_type</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ShorelineDatastore.get_shoreline_results"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ShorelineDatastore.get_shoreline_results" title="Link to this definition"></a></dt>
+<dd><p>Retrieve the stored results for a given image.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>site</strong> – (str) The site identifier.</p></li>
+<li><p><strong>camera</strong> – (str) The camera identifier.</p></li>
+<li><p><strong>year</strong> – (str) The year of the image.</p></li>
+<li><p><strong>month</strong> – (str) The month of the image.</p></li>
+<li><p><strong>day</strong> – (str) The day of the image.</p></li>
+<li><p><strong>time</strong> – (str) The time of the image.</p></li>
+<li><p><strong>image_type</strong> – (str) The type of the image (e.g., ‘bright’).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(dict) A dictionary containing the shoreline coords, bottom boundary, watershed coords, y-distance, and RMSE values.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ShorelineDatastore.save_shoreline_coords_to_file">
+<span class="sig-name descname"><span class="pre">save_shoreline_coords_to_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">site</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">camera</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">year</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">month</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">day</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_folder</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'output'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ShorelineDatastore.save_shoreline_coords_to_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ShorelineDatastore.save_shoreline_coords_to_file" title="Link to this definition"></a></dt>
+<dd><p>Save shoreline_coords to a text file with a name based on the dictionary keys.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>site</strong> – (str) The site identifier.</p></li>
+<li><p><strong>camera</strong> – (str) The camera identifier.</p></li>
+<li><p><strong>year</strong> – (str) The year of the image.</p></li>
+<li><p><strong>month</strong> – (str) The month of the image.</p></li>
+<li><p><strong>day</strong> – (str) The day of the image.</p></li>
+<li><p><strong>time</strong> – (str) The time of the image.</p></li>
+<li><p><strong>image_type</strong> – (str) The type of the image (e.g., ‘bright’).</p></li>
+<li><p><strong>output_folder</strong> – (str) Folder to save the output file. Default is “output”.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Datastore.ShorelineDatastore.store_shoreline_results">
+<span class="sig-name descname"><span class="pre">store_shoreline_results</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">site</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">camera</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">year</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">month</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">day</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shoreline_coords</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bottom_boundary</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">watershed_coords</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_distance</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rmse_value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Datastore.html#ShorelineDatastore.store_shoreline_results"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Datastore.ShorelineDatastore.store_shoreline_results" title="Link to this definition"></a></dt>
+<dd><p>Store the computed results for a given image.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>site</strong> – (str) The site identifier.</p></li>
+<li><p><strong>camera</strong> – (str) The camera identifier.</p></li>
+<li><p><strong>year</strong> – (str) The year of the image.</p></li>
+<li><p><strong>month</strong> – (str) The month of the image.</p></li>
+<li><p><strong>day</strong> – (str) The day of the image.</p></li>
+<li><p><strong>time</strong> – (str) The time of the image.</p></li>
+<li><p><strong>image_type</strong> – (str) The type of the image (e.g., ‘bright’).</p></li>
+<li><p><strong>shoreline_coords</strong> – (np.ndarray) The final shoreline coords.</p></li>
+<li><p><strong>bottom_boundary</strong> – (np.ndarray) The computed bottom boundarys. (1,2,3,median)</p></li>
+<li><p><strong>watershed_coords</strong> – (np.ndarray) The watershed coordinates.</p></li>
+<li><p><strong>y_distance</strong> – (np.ndarray) The computed y-distance.</p></li>
+<li><p><strong>rmse_value</strong> – (float) The computed RMSE value.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<section id="workflow-module">
+<span id="module-c_Workflow"></span><h2>Workflow Module<a class="headerlink" href="#workflow-module" title="Link to this heading"></a></h2>
+<p>This module provides workflow classes to obtain shorelines from imagery and compared shorelines.</p>
+<dl class="simple">
+<dt>Classes:</dt><dd><ul class="simple">
+<li><p>ShorelineWorkflow: Main class for determining shoreline from ARGUS-style image products.</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<dl class="py class">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">c_Workflow.</span></span><span class="sig-name descname"><span class="pre">ShorelineWorkflow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shoreline_datastore</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">make_intermediate_plots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A class that processes ARGUS-style image products by applying filtering criteria (brightness, blur, glare),
+segmenting the shoreline using the SAM model, and performing analysis on the detected shoreline.
+The processed results are stored in the provided datastore.</p>
+<p>This class supports different image types such as ‘bright’, ‘timex’, ‘dark’, etc., and can generate intermediate plots.
+Filtering is applied before any further processing.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.shoreline_datastore">
+<span class="sig-name descname"><span class="pre">shoreline_datastore</span></span><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.shoreline_datastore" title="Link to this definition"></a></dt>
+<dd><p>The datastore to store results.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#c_Datastore.ShorelineDatastore" title="c_Datastore.ShorelineDatastore">ShorelineDatastore</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.apply_watershed">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">apply_watershed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bottom_boundary</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kernel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">25</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">make_plot</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.apply_watershed"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.apply_watershed" title="Link to this definition"></a></dt>
+<dd><p>Apply watershed segmentation to clean up the shoreline using the bottom boundary as a marker.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image_path</strong> – (str) Path to the input image.</p></li>
+<li><p><strong>bottom_boundary</strong> – (np.ndarray) Extracted bottom boundary coordinates used as markers for the watershed algorithm.</p></li>
+<li><p><strong>kernel_size</strong> – (int, optional) Size of the kernel for Gaussian blur (default is 200).</p></li>
+<li><p><strong>window_size</strong> – (int, optional) Size of the sliding window to calculate noise (standard deviation) (default is 25).</p></li>
+<li><p><strong>make_plot</strong> – (bool, optional) Whether to plot intermediate results (default is False).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>markers (np.ndarray): The segmented image after watershed with marked boundary.</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>watershed_coords (np.ndarray): Extracted coordinates of the watershed boundary.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.compute_rmse">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">compute_rmse</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coords_1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coords_2</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.compute_rmse"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.compute_rmse" title="Link to this definition"></a></dt>
+<dd><p>Compute the RMSE (Root Mean Squared Error) between two sets of coordinates.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>coords_1</strong> – (np.ndarray) First set of coordinates (e.g., watershed coordinates).</p></li>
+<li><p><strong>coords_2</strong> – (np.ndarray) Second set of coordinates (e.g., bottom boundary).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(float) The RMSE value between the two sets of coordinates, or None if there are issues with the input.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.compute_y_distance">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">compute_y_distance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coords_1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coords_2</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.compute_y_distance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.compute_y_distance" title="Link to this definition"></a></dt>
+<dd><p>Compute the distance between the y-values of two sets of coordinates for each x-coordinate.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>coords_1</strong> – (np.ndarray) First set of coordinates (e.g., watershed boundary).</p></li>
+<li><p><strong>coords_2</strong> – (np.ndarray) Second set of coordinates (e.g., bottom boundary).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(np.ndarray) An array of distances between the y-values of the two coordinate sets.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.extract_bottom_boundary_from_mask">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">extract_bottom_boundary_from_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">make_plot</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.extract_bottom_boundary_from_mask"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.extract_bottom_boundary_from_mask" title="Link to this definition"></a></dt>
+<dd><p>Extracts the bottom boundary (maximum y-value for each x) from a binary mask.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mask</strong> – (np.ndarray) The binary mask where 255 represents the object of interest.</p></li>
+<li><p><strong>make_plot</strong> – (bool, optional) Whether to plot intermediate results (default is False).</p></li>
+<li><p><strong>image_path</strong> – (str, optional) Path to the image to segment (default is ‘’).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(np.ndarray) The bottom boundary as (x, y) coordinates.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.find_surfzone_coords">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">find_surfzone_coords</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_points</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_attempts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">make_plot</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.find_surfzone_coords"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.find_surfzone_coords" title="Link to this definition"></a></dt>
+<dd><p>Extract up to <cite>num_points</cite> random points from the largest connected component in the image
+representing the surfzone region (typically the shoreline).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image_path</strong> – (str) Path to the input image.</p></li>
+<li><p><strong>num_points</strong> – (int, optional) Number of points to find (default is 5).</p></li>
+<li><p><strong>step</strong> – (int, optional) Horizontal step between searches for valid points (default is 200).</p></li>
+<li><p><strong>max_attempts</strong> – (int, optional) Maximum number of attempts to find valid points (default is 100).</p></li>
+<li><p><strong>make_plot</strong> – (bool, optional) Whether to plot intermediate results (default is False).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>marker_coords (list of tuples): List of (x, y) coordinates of the marker points.</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>main_region_mask (np.ndarray): Binary mask of the cleaned region.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.generate_random_coords_above_line">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">generate_random_coords_above_line</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coords</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_range</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_points</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_y_offset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_y_offset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.generate_random_coords_above_line"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.generate_random_coords_above_line" title="Link to this definition"></a></dt>
+<dd><p>Generate random coords above a line, with random x-values within dynamically determined intervals.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>coords</strong> – (np.ndarray or list) (x, y) coords defining the line.</p></li>
+<li><p><strong>max_range</strong> – (int, optional) Maximum range between x-values for each interval. Default is 200.</p></li>
+<li><p><strong>min_points</strong> – (int, optional) Minimum number of intervals (or points) to generate. Default is 5.</p></li>
+<li><p><strong>min_y_offset</strong> – (int, optional) Minimum y-offset to sample above the line. Default is 100.</p></li>
+<li><p><strong>max_y_offset</strong> – (int, optional) Maximum y-offset to sample above the line. Default is 200.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(list) List of (x, y) tuples representing the random coords above the line.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.load_and_predict_sam_model">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">load_and_predict_sam_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'segment-anything-main/sam_vit_h_4b8939.pth'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'vit_h'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shoreline_coords</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[(1000,</span> <span class="pre">300)]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beach_coords</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.load_and_predict_sam_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.load_and_predict_sam_model" title="Link to this definition"></a></dt>
+<dd><p>Loads the SAM model and makes a prediction for a given image.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image_path</strong> – (str) Path to the image to segment.</p></li>
+<li><p><strong>checkpoint_path</strong> – (str, optional) Path to the SAM model checkpoint (default is “segment-anything-main/sam_vit_h_4b8939.pth”).</p></li>
+<li><p><strong>model_type</strong> – (str, optional) Type of SAM model to use (“vit_b”, “vit_l”, “vit_h”) (default is “vit_h”).</p></li>
+<li><p><strong>shoreline_coords</strong> – (list of tuples, optional) List of shoreline coordinates (x, y), used as input points (default is [(1000, 300)]).</p></li>
+<li><p><strong>beach_coords</strong> – (list of tuples, optional) Optional list of additional coordinates to help with segmentation (default is None).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(np.ndarray) The best mask prediction from the SAM model.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.plot_image_and_shoreline">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">plot_image_and_shoreline</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shoreline_coords</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">watershed_coords</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">other_coords</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_distance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.plot_image_and_shoreline"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.plot_image_and_shoreline" title="Link to this definition"></a></dt>
+<dd><p>Plot the image with the bottom boundary and the watershed fitted shoreline.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image_path</strong> – (str) The path to the image.</p></li>
+<li><p><strong>shoreline_coords</strong> – (np.ndarray, optional) The extracted bottom boundary coords to plot (default is None).</p></li>
+<li><p><strong>watershed_coords</strong> – (np.ndarray, optional) The extracted watershed boundary coords to plot (default is None).</p></li>
+<li><p><strong>other_coords</strong> – (np.ndarray, optional) Any other set of coordinates to plot (default is None).</p></li>
+<li><p><strong>y_distance</strong> – (np.ndarray, optional) The y-distance to plot on a secondary y-axis (default is None).</p></li>
+<li><p><strong>save_dir</strong> – (str, optional) Directory to save the plot (default is None, meaning the plot will be displayed but not saved).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.process">
+<span class="sig-name descname"><span class="pre">process</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.process"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.process" title="Link to this definition"></a></dt>
+<dd><p>Main function to process a single image based on the selected <cite>image_type</cite>.
+Calls the appropriate workflow method based on the image type.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(ShorelineDatastore) The datastore after processing the image or a string indicating failure.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.process_bright">
+<span class="sig-name descname"><span class="pre">process_bright</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.process_bright"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.process_bright" title="Link to this definition"></a></dt>
+<dd><p>Process a single ‘bright’ image.</p>
+<p>This method follows the workflow specific to ‘bright’ image types. It performs the following steps:
+1. Extract bottom boundaries from the image in three attempts (using SAM).
+2. Apply a watershed segmentation to the image based on SAM shoreline.
+3. Compute RMSE between watershed coordinates and SAM shoreline.
+4. Plot and store the results.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(ShorelineDatastore) The updated shoreline datastore after processing the image.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.process_dark">
+<span class="sig-name descname"><span class="pre">process_dark</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.process_dark"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.process_dark" title="Link to this definition"></a></dt>
+<dd><p>Process a single ‘dark’ image. Placeholder for future implementation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(str) A message indicating that no workflow is available for ‘dark’ image type yet.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.process_snap">
+<span class="sig-name descname"><span class="pre">process_snap</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.process_snap"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.process_snap" title="Link to this definition"></a></dt>
+<dd><p>Process a single ‘snap’ image. Placeholder for future implementation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(str) A message indicating that no workflow is available for ‘snap’ image type yet.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.process_timex">
+<span class="sig-name descname"><span class="pre">process_timex</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.process_timex"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.process_timex" title="Link to this definition"></a></dt>
+<dd><p>Process a single ‘timex’ image.</p>
+<p>This method follows the workflow specific to ‘timex’ image types. It uses the results from the ‘bright’ image
+processing and follows similar steps to the ‘bright’ workflow.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(ShorelineDatastore) The updated shoreline datastore after processing the image.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.process_var">
+<span class="sig-name descname"><span class="pre">process_var</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.process_var"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.process_var" title="Link to this definition"></a></dt>
+<dd><p>Process a single ‘var’ image. Placeholder for future implementation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(str) A message indicating that no workflow is available for ‘var’ image type yet.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="c_Workflow.ShorelineWorkflow.resample_to_boundary">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">resample_to_boundary</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coords_1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coords_2</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/c_Workflow.html#ShorelineWorkflow.resample_to_boundary"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#c_Workflow.ShorelineWorkflow.resample_to_boundary" title="Link to this definition"></a></dt>
+<dd><p>Resample coordinates from one set to match the length and shape of another using linear interpolation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>coords_1</strong> – (np.ndarray) First set of coordinates (e.g., watershed boundary).</p></li>
+<li><p><strong>coords_2</strong> – (np.ndarray) Second set of coordinates (e.g., bottom boundary).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(np.ndarray) Resampled coordinates with the same length as the second set.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<section id="utils-module">
+<span id="module-utils"></span><h2>utils Module<a class="headerlink" href="#utils-module" title="Link to this heading"></a></h2>
+<p>This module provides functions helpful for ShoreScan</p>
+<dl class="simple">
+<dt>Functions:</dt><dd><ul class="simple">
+<li><p>create_video_from_images</p></li>
+<li><p>check_processed_images</p></li>
+<li><p>removed_processed_images</p></li>
+<li><p>process_images</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<dl class="py function">
+<dt class="sig sig-object py" id="utils.check_processed_images">
+<span class="sig-prename descclassname"><span class="pre">utils.</span></span><span class="sig-name descname"><span class="pre">check_processed_images</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pt_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/utils.html#check_processed_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#utils.check_processed_images" title="Link to this definition"></a></dt>
+<dd><p>Check if an image has been processed by verifying the existence of its corresponding shoreline point and plot files.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image_metadata</strong> – (dict) A dictionary containing metadata of the image to check.
+Expected keys include ‘site’, ‘camera’, ‘year’, ‘month’, ‘day’, ‘time’, and ‘image_type’.</p></li>
+<li><p><strong>pt_dir</strong> – (str) Directory path where shoreline point files (e.g., ‘.txt’ files) are stored.</p></li>
+<li><p><strong>output_dir</strong> – (str) Directory path where shoreline output files (e.g., ‘.png’ plots) are stored.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(bool) True if the image has been processed (i.e., both the point and plot files exist),
+False otherwise.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="utils.create_video_from_images">
+<span class="sig-prename descclassname"><span class="pre">utils.</span></span><span class="sig-name descname"><span class="pre">create_video_from_images</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">datastore</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">video_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'output_video.mp4'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'timex'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">camera</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">site</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/utils.html#create_video_from_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#utils.create_video_from_images" title="Link to this definition"></a></dt>
+<dd><p>Create a video from images in the datastore with optional filtering by image type, camera, and site.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>datastore</strong> – (ImageDatastore) The ImageDatastore object containing the images to be processed.</p></li>
+<li><p><strong>video_name</strong> – (str, optional) The name of the output video file. Default is “output_video.mp4”.</p></li>
+<li><p><strong>frame_rate</strong> – (int, optional) The frame rate for the video (frames per second). Default is 30.</p></li>
+<li><p><strong>image_type</strong> – (str, optional) The type of images to include in the video (e.g., ‘bright’, ‘snap’). Default is ‘timex’.</p></li>
+<li><p><strong>camera</strong> – (str, optional) The camera identifier to filter by (e.g., ‘CACO03’). If None, process all cameras. Default is None.</p></li>
+<li><p><strong>site</strong> – (str, optional) The site identifier to filter by. If None, process all sites. Default is None.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If no images match the filter criteria.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="utils.process_images">
+<span class="sig-prename descclassname"><span class="pre">utils.</span></span><span class="sig-name descname"><span class="pre">process_images</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">datastore</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shoreline_datastore</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">make_intermediate_plots</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/utils.html#process_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#utils.process_images" title="Link to this definition"></a></dt>
+<dd><p>Process images of a specified type and perform shoreline analysis using the ShorelineWorkflow class.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>datastore</strong> – (ImageDatastore) An instance of the ImageDatastore class containing image metadata.</p></li>
+<li><p><strong>img_type</strong> – (str) The type of image to process (e.g., ‘bright’, ‘timex’).</p></li>
+<li><p><strong>shoreline_datastore</strong> – (ShorelineDatastore) An instance of the ShorelineDatastore class to store shoreline analysis results.</p></li>
+<li><p><strong>make_intermediate_plots</strong> – (bool) Flag indicating whether intermediate plots should be generated during processing.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="utils.remove_processed_images">
+<span class="sig-prename descclassname"><span class="pre">utils.</span></span><span class="sig-name descname"><span class="pre">remove_processed_images</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">datastore</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pt_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/utils.html#remove_processed_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#utils.remove_processed_images" title="Link to this definition"></a></dt>
+<dd><p>Remove images from the datastore that have already been processed (i.e., their corresponding
+shoreline point and plot files exist).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>datastore</strong> – (ImageDatastore) An instance of the ImageDatastore class containing image metadata.</p></li>
+<li><p><strong>pt_dir</strong> – (str) Directory path for shoreline point files.</p></li>
+<li><p><strong>output_dir</strong> – (str) Directory path for shoreline output files.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="ShoreScan documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="methodology.html" class="btn btn-neutral float-right" title="Processing Methods" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Athina MZ Lange.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
