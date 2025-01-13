@@ -1,6 +1,7 @@
 # ShoreScan
 
 Python-based tool for automated shoreline detection from standard ARGUS bright and timex images.
+See more documentation [here](https://athinalange.github.io/ShoreScan/)
 
 ---
 ## Installation
