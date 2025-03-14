@@ -1,0 +1,18 @@
+{
+    "CACO03": {
+        "c1": {
+            "reverse_flag": false,
+            "coordinate_files": {
+                "2024-09-20T15:29:00|2024-11-08T00:00:00": "/mnt/c/Users/alange/Desktop/DATA/CODES/GitHub/ShoreScan/ShoreScan_runup_example/DATA/DATA/CACO03_c1_timestack_20240920.pix",
+                "2024-11-08T00:00:00|2025-01-24T00:00:00": "/mnt/c/Users/alange/Desktop/DATA/CODES/GitHub/ShoreScan/ShoreScan_runup_example/DATA/DATA/CACO03_c1_timestack_20241107.pix"
+            }
+        },
+        "c2": {
+            "reverse_flag": false,
+            "coordinate_files": {
+                "2024-09-20T15:29:00|2024-11-08T00:00:00": "/mnt/c/Users/alange/Desktop/DATA/CODES/GitHub/ShoreScan/ShoreScan_runup_example/DATA/DATA/CACO03_c2_timestack_20240920.pix",
+                "2024-11-08T00:00:00|2025-01-24T00:00:00": "/mnt/c/Users/alange/Desktop/DATA/CODES/GitHub/ShoreScan/ShoreScan_runup_example/DATA/DATA/CACO03_c2_timestack_20241107.pix"
+            }
+        }
+    }
+}

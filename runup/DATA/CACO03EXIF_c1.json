@@ -1,0 +1,101 @@
+{
+    "All":
+    {
+        "Copyright": "Public Domain",
+        "CopyrightNotice": "Public Domain - please credit U.S. Geological Survey",
+        "Artist": "USGS WHCMSC",
+        "Make": "FLIR",
+        "Model": "Blackfly S",
+        "GPSLatitude": "41.89278276", 
+        "GPSLongitude": "-69.96326880",
+        "GPSMapDatum": "EPSG:6348 NAD83 (2011) / UTM Zone 19N",
+        "GPSLatitudeRef": "N",
+        "GPSLongitudeRef": "W",
+        "GPSAreaInformation": "surveyed with RTK-GNSS",
+        "Credit": "U.S. Geological Survey",
+        "Contact": "whsc_data_contact@usgs.gov",
+        "UsageTerms": "Unless otherwise stated, all data, metadata and related materials are considered to satisfy the quality standards relative to the purpose for which the data were collected. Although these data and associated metadata have been reviewed for accuracy and completeness and approved for release by the U.S. Geological Survey  (USGS), no warranty expressed or implied is made regarding the display or utility of the data for other purposes, nor on all computer  systems, nor shall the act of distribution constitute any such warranty",
+        "AttributionURL": "https://doi.org/10.5066/P15IDMWH",
+        "Contributor": "Athina M.Z. Lange, Jin-Si R. Over, Christopher R. Sherwood",
+        "XMP-photoshop:Credit": "U.S. Geological Survey",
+        "iptcCore:CreatorWorkEmail": "whsc_data_contact@usgs.gov",
+        "Rights": "Public Domain"
+    },
+    "Products": 
+    {
+        "bright": 
+        {
+            "Caption": "The brightest image taken at CACO-03 c1 at Cape Cod National Seashore, Massachusetts, USA on [insert_creation_datetime]",
+            "Comment": "Brightest image for [insert_creation_datetime]; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA, 2025-006-FA",
+            "Caption-Abstract": "The brightest image represents the maximum intensity of each pixel during the 10 minute video.  This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts, Field Activity Number: 2024-002-FA and 2025-006-FA on [insert_creation_datetime]. For more info, see https://www.usgs.gov/centers/whcmsc/science/using-video-imagery-study-marconi-beach.",
+            "Keywords":  "Marconi Beach, Cape Cod National Seashore, Massachusetts, CoastCam, USGS, bright, remote sensing",
+            "Description": "https://cmgds.marine.usgs.gov/services/activity.php?fan=2024-002-FA; https://cmgds.marine.usgs.gov/services/activity.php?fan=2025-006-FA; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA and 2025-006-FA.",
+            "ExternalMetadataLink": "https://www1.usgs.gov/pir/api/identifiers/USGS:67a63f21d34e329fb2039695"
+
+        },
+        
+        "dark":
+        {
+            "Caption": "The darkest image taken at CACO-03 c1 at Cape Cod National Seashore, Massachusetts, USA on [insert_creation_datetime]",
+            "Comment": "Darkest image for [insert_creation_datetime]; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA, 2025-006-FA",
+            "Caption-Abstract": "The darkest image represents the minimum intensity of each pixel during the 10 minute video.  This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts, Field Activity Number: 2024-002-FA and 2025-006-FA on [insert_creation_datetime]. For more info, see https://www.usgs.gov/centers/whcmsc/science/using-video-imagery-study-marconi-beach.",
+            "Keywords":  "Marconi Beach, Cape Cod National Seashore, Massachusetts, CoastCam, USGS, dark, remote sensing",
+            "Description": "https://cmgds.marine.usgs.gov/services/activity.php?fan=2024-002-FA; https://cmgds.marine.usgs.gov/services/activity.php?fan=2025-006-FA; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA and 2025-006-FA.",
+            "ExternalMetadataLink": "https://www1.usgs.gov/pir/api/identifiers/USGS:67a63f21d34e329fb2039695"
+        },
+
+        "snap":
+        {
+            "Caption": "The snapshot image taken at CACO-03 c1 at Cape Cod National Seashore, Massachusetts, USA on [insert_creation_datetime]",
+            "Comment": "Snapshot image for [insert_creation_datetime]; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA",
+            "Caption-Abstract": "The snapshot image represents the first frame of the 10 minute video.  This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts, Field Activity Number: 2024-002-FA and 2025-006-FA on [insert_creation_datetime]. For more info, see https://www.usgs.gov/centers/whcmsc/science/using-video-imagery-study-marconi-beach.",
+            "Keywords":  "Marconi Beach, Cape Cod National Seashore, Massachusetts, CoastCam, USGS, snapshot, remote sensing",
+            "Description": "https://cmgds.marine.usgs.gov/services/activity.php?fan=2024-002-FA; https://cmgds.marine.usgs.gov/services/activity.php?fan=2025-006-FA; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA and 2025-006-FA.",
+            "ExternalMetadataLink": "https://www1.usgs.gov/pir/api/identifiers/USGS:67a63f21d34e329fb2039695"            
+        },
+
+        "timex":
+        {
+            "Caption": "The time exposure image taken at CACO-03 c1 at Cape Cod National Seashore, Massachusetts, USA on [insert_creation_datetime]",
+            "Comment": "Time exposure image for [insert_creation_datetime]; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA, 2025-006-FA",
+            "Caption-Abstract": "The time exposure image represents the time-averaged image of all frames during the 10 minute video.  This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts, Field Activity Number: 2024-002-FA and 2025-006-FA on [insert_creation_datetime]. For more info, see https://www.usgs.gov/centers/whcmsc/science/using-video-imagery-study-marconi-beach.",
+            "Keywords":  "Marconi Beach, Cape Cod National Seashore, Massachusetts, CoastCam, USGS,time exposure, timex, remote sensing",
+            "Description": "https://cmgds.marine.usgs.gov/services/activity.php?fan=2024-002-FA; https://cmgds.marine.usgs.gov/services/activity.php?fan=2025-006-FA; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA and 2025-006-FA.",
+            "ExternalMetadataLink": "https://www1.usgs.gov/pir/api/identifiers/USGS:67a63f21d34e329fb2039695"
+        },
+
+        "var":
+        {
+            "Caption": "The variance image taken at CACO-03 c1 at Cape Cod National Seashore, Massachusetts, USA on [insert_creation_datetime]",
+            "Comment": "Variance image for [insert_creation_datetime]; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA, 2025-006-FA",
+            "Caption-Abstract": "The variance image represents the standard deviation of pixel intensity for each pixel during the 10 minute video.  This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts, Field Activity Number: 2024-002-FA and 2025-006-FA on [insert_creation_datetime]. For more info, see https://www.usgs.gov/centers/whcmsc/science/using-video-imagery-study-marconi-beach.",
+            "Keywords":  "Marconi Beach, Cape Cod National Seashore, Massachusetts, CoastCam, USGS, variance, remote sensing",
+            "Description": "https://cmgds.marine.usgs.gov/services/activity.php?fan=2024-002-FA; https://cmgds.marine.usgs.gov/services/activity.php?fan=2025-006-FA; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA and 2025-006-FA.",
+            "ExternalMetadataLink": "https://www1.usgs.gov/pir/api/identifiers/USGS:67a63f21d34e329fb2039695"
+        },
+        "ras":
+        {
+            "Caption": "The timestack image taken at CACO-03 c1 at Cape Cod National Seashore, Massachusetts, USA on [insert_creation_datetime]",
+            "Comment": "Timestack image for [insert_creation_datetime]; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA, 2025-006-FA",
+            "Caption-Abstract": "The timestack image provides a cross-shore array of pixels through time during the 10 minute video.  This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts, Field Activity Number: 2024-002-FA and 2025-006-FA on [insert_creation_datetime]. For more info, see https://www.usgs.gov/centers/whcmsc/science/using-video-imagery-study-marconi-beach.",
+            "Keywords":  "Marconi Beach, Cape Cod National Seashore, Massachusetts, CoastCam, USGS, timestack, remote sensing",
+            "Description": "https://cmgds.marine.usgs.gov/services/activity.php?fan=2024-002-FA; https://cmgds.marine.usgs.gov/services/activity.php?fan=2025-006-FA; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA and 2025-006-FA.",
+            "ExternalMetadataLink": "https://www1.usgs.gov/pir/api/identifiers/USGS:67a63f21d34e329fb2039695"
+        }
+    },
+
+    "Intrinsic":
+    {
+        "ExternalMetadataLink": "https://www1.usgs.gov/pir/api/identifiers/USGS:67a63ef6d34e329fb2039690",
+        "Keywords": "Marconi Beach, Cape Cod National Seashore, Massachusetts, CoastCam, USGS, intrinsic calibration, snapshot, remote sensing",
+        "Description": "https://cmgds.marine.usgs.gov/services/activity.php?fan=2024-002-FA; https://cmgds.marine.usgs.gov/services/activity.php?fan=2025-006-FA; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA and 2025-006-FA."
+    },
+
+    "Extrinsic":
+    {
+        "ExternalMetadataLink": "https://www1.usgs.gov/pir/api/identifiers/USGS:67a63ef6d34e329fb2039690",
+        "Keywords": "Marconi Beach, Cape Cod National Seashore, Massachusetts, CoastCam, USGS, extrinsic calibration, remote sensing, ground control point",
+       "Description": "https://cmgds.marine.usgs.gov/services/activity.php?fan=2024-002-FA; https://cmgds.marine.usgs.gov/services/activity.php?fan=2025-006-FA; This image was captured from a stationary camera (CACO-03 c1) at Cape Cod National Seashore, Massachusetts. Field Activity Number: 2024-002-FA and 2025-006-FA."
+    }
+    
+}

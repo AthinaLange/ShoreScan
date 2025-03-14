@@ -1,0 +1,10 @@
+name: CACO-03
+serial_number: unknown
+camera_number: 1
+calibration_date: 2024-10-23
+coordinate_system: xyz
+#name - name of the camera station
+#serial_number - camera serial number
+#camera_number - camera number for the corresponding station
+#calibration_date - date when camera extrinsic survey calibration was performed (date calibration is valid)
+#coordinate_system - coordinate system for extrinsic parameters. Either "geo" or "xyz"
