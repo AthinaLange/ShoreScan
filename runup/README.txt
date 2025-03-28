@@ -1,6 +1,6 @@
 # ShoreScan_runup
 
-Python-based tool for runup processing from timestack output from ARGUS-style cameras.
+Python-based tool for image processing of output from ARGUS-style cameras, including image rectification and runup extraction from timestacks
 
 See more documentation [here](https://athinalange.github.io/ShoreScan/)
 
@@ -11,15 +11,37 @@ Use exif_shorescan.yml file
 Download [Segment-Anything](https://github.com/facebookresearch/segment-anything) and install in conda environment.
 Download [segmentation-gym](https://github.com/Doodleverse/segmentation_gym) and install in conda environment.
 
+### Install through .yml file
+conda env create --name shorescan -f shorescan_initial_config.yml
+
+
+### Full install on WSL2 (Ubuntu 24.04.1)
+Start from segmentation-gym install with gym.yml conda env create --name shorescan -f gym.yml
+conda activate shorescan
+sudo apt install libimage-exiftool-perl
+conda install xarray netcdf4 numpy=1.24.* plotly scikit-learn ipykernel OpenCV piexif
+pip install utm segment-anything pyexiftool onnxruntime onnx
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+python -c "from transformers import TFSegformerForSemanticSegmentation"
+
+cd segment-anything-main; pip install -e .
+
+### Additional things
+
+Update to segment-anything-main/segment-anything/build_sam.py line 105
+pytorch version 2.6 requires: ``` state_dict = torch.load(f, weights_only=False) ```
+
+Please download model: sam_vit_h_4b8939.pth from segment-anything and put it in segment-anything-main
+
+
 ## Run
 User prompting:
 ```
-python main_runup.py
+CoastCam_processing.ipynb
 ```
-Config prompting:
-```
-python main_runup.py --config /path/to/config.json
-```
+
 
 NOTE: 'write_netCDF' doesn't fully work yet bc dist_uv_to_xyz and DEM stuff needs to be written
 
@@ -88,22 +110,54 @@ site_settings.json:
 	}
 }
 
+products.json
+{
+        "type": "Grid",
+        "frameRate": 2,
+        "lat": origin latitude,
+        "lon": origin longitude,
+        "east": utm eastings (priority over lat/lon),
+        "north": utm northings (priority over lat/lon), 
+        "zone": utm zone,
+        "angle": shorenormal angle from north,
+        "xlim": [0, 200],
+        "ylim": [ -100, 300],
+        "dx": cross-shore spacing in meters,
+        "dy": along-shore spacing in meters,
+        "x": null,
+        "y": null,
+        "z": null,
+        "tide": 0,
+        "lim_flag": 0
+    }
+
 config.json:
  {
-        "rawDir": "/path/to/raw/images",
-        "timestackDir": "/path/to/timestacks",
-        "camera_settingsDir": "/path/to/camera_settings.json",
-        "grayscaleDir": "/path/to/grayscale",
-        "overlayDir": "/path/to/overlays",
-        "runup_val": 0.0,
-        "rundown_val": -1.5,
-        "segformerWeightsDir": "/path/to/segformer/weights",
-        "model": "SegFormer_Madeira_Duck_equal_finetune_Waiakane_fullmodel.h5",
-        "segformerCodeDir": "/path/to/segformer/code",
-        "site_settingsDir": "/path/to/site_settings.json",
-        "split_tiff": false,
-	"jsonDir": "/path/to/json/files",
-	"yamlDir": "/path/to/yaml/files"
+       "imageDir": "path/to/images",
+    	"jsonDir": "/path/to/json/folder",
+    	"yamlDir": "path/to/yaml/folder",
+    	"grayscaleDir": "/path/to/grayscale",
+    	"runupDir": "/path/to/runup/files",
+   	"videoDir": "path/to/video/folder",
+    	"merged_rectifiedDir": "path/to/merged/and/rectified/images",
+    	"pixsaveDir": "path/to/folder/to/save/pix",
+    	"netcdfDir": "path/to/netcdf",
+    	"camera_settingsPath": "/path/to/camera_settings.json",
+    	"site_settingsPath": "/path/to/site_settings.json",
+    	"productsPath": "path/to/products/dictionary/CACO03_products.json",
+    	"segformerWeightsDir": "/path/to/segformer/weights",
+    	"model": "SegFormer_Madeira_Duck_equal_finetune_Waiakane_fullmodel.h5",
+    	"segformerCodeDir": "/path/to/segformer/code",
+    	"split_tiff": false,
+    	"runup_val": 0.0,
+    	"rundown_val": -1.5,
+    	"thresholds": {
+        	"snap" : 20,
+        	"timex" : 15,
+        	"bright" : 35,
+        	"dark" : 20,
+        	"var" : 30
+    	}
 }
 
 
@@ -111,20 +165,25 @@ config.json:
 
 Example Folder Structure
 
-ShoreScan_runup/
+ShoreScan/
 │── CODES                   
-│   ├── c_Datastore.py        												    # Class to define ImageDatastore
-│   ├── main_runup.py                											# Main script 
+│   ├── ImageHandler.py        												# Class to process images
+│   ├── CoastCam_processing.ipynb                								# Main script 
 │   ├── RunUpTimeseriesFunctions_CHI.py               							# Code to compute runup statistics
 │   ├── seg_images_in_folder.py                								# Script to segment timestacks
 │   ├── segformer.py                											# segformer definition
-│   ├── utils_play.py   														# utils functions              
+│   ├── utils_exif.py   														# utils functions          
+│   ├── utils_segformer.py   													# utils functions          
+│   ├── utils_CIRN.py   														# utils functions         
+│   ├── utils_runup.py   														# utils functions               
 │── DATA                               
 │   ├── DATA/
 │   	├── DEM/
 │   		├── something DEM													# Elevation for runup projection
-│   	├── raw/	
+│   	├── images/	
 │   		├── *.tiff															# Raw .tiff images from camera
+│   		├── *.jpg															# ARGUS image products
+│   		├── *.png															# Split transects
 │   	├── CACO03_c1_timestack_20240920.pix									# c1 U,V coordinates for camera
 │   	├── CACO03_c2_timestack_20240920.pix									# c2 U,V coordinates for camera
 │   ├── JSON/  
@@ -132,6 +191,7 @@ ShoreScan_runup/
 │   	├── CACO03EXIF_c1.json													# c2 site info - for exif
 │   	├── camera_settings.json												# Info for .pix locations
 │   	├── site_settings.json													# Info for netCDF							
+│   	├── CACO03_products.json												# Info for products (grid info)					
 │   ├── segmentation_gym/
 │   	├── config/
 │   		├── SegFormer_Madeira_Duck_equal.json								# segfomer model
@@ -146,5 +206,5 @@ ShoreScan_runup/
 │   	├── CACO03_c2_20241023_EO.yaml											# c2 EO yaml
 │   	├── CACO03_c1_20241023_metadata.yaml									# c1 metadata yaml
 │   	├── CACO03_c2_20241023_metadata.yaml									# c2 metadata yaml
-│   ├── config.json                											# Configuration file with paths and parameters
+├── config.json                												# Configuration file with paths and parameters
 │── README.md                													# Project documentation
