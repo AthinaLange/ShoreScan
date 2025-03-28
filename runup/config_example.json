@@ -1,0 +1,30 @@
+{
+    "imageDir": "/path/to/images",
+    "jsonDir": "/path/to/json/folder",
+    "yamlDir": "/path/to/yaml/folder",
+    "grayscaleDir": "/path/to/grayscale",
+    "runupDir": "/path/to/runup/files",
+    "videoDir": "/path/to/movie/folder",
+    "merged_rectifiedDir": "/path/to/merged/and/rectified/images",
+    "pixsaveDir":"/path/to/folder/to/save/pix",
+    "netcdfDir": "/path/to/netcdf",
+    "shorelineDir": "/path/to/shoreline",
+    "camera_settingsPath": "/path/to/camera_settings.json",
+    "site_settingsPath": "/path/to/site_settings.json",
+    "productsPath": "/path/to/products/dictionary/CACO03_products.json",
+    "segformerWeightsDir": "/path/to/segformer/weights",
+    "segformerModel": "SegFormer_Madeira_Duck_equal_finetune_Waiakane_fullmodel.h5",
+    "segformerCodeDir": "/path/to/segformer/code",
+    "segmentAnythingDir": "/path/to/segment-anything-main/",
+    "segmentAnythingModel": "sam_vit_h_4b8939.pth",
+    "split_tiff": false,
+    "runup_val": 0.0,
+    "rundown_val": -1.5,
+    "thresholds": {
+        "snap" : 20,
+        "timex" : 15,
+        "bright" : 35,
+        "dark" : 20,
+        "var" : 30
+    }
+}

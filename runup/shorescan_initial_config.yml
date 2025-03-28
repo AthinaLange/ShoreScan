@@ -1,0 +1,35 @@
+name: sample
+channels:
+  - conda-forge
+  - nvidia
+dependencies:
+ - python=3.10
+ - scipy
+ - numpy=1.24.*
+ - scikit-image
+ - cuda
+ - cudatoolkit=11.8.0
+ - ipython
+ - joblib
+ - tqdm
+ - pandas
+ - pip
+ - natsort
+ - matplotlib
+ - xarray
+ - netcdf4
+ - plotly
+ - scikit-learn
+ - ipykernel
+ - opencv
+ - piexif
+ - pip:
+    - doodleverse_utils
+    - transformers==4.37.*
+    - nvidia-cudnn-cu11==8.6.0.163
+    - tensorflow==2.12.*
+    - utm
+    - segment-anything
+    - pyexiftool
+    - onnxruntime
+    - onnx
