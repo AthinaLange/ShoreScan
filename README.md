@@ -6,7 +6,7 @@ See more documentation [here](https://athinalange.github.io/ShoreScan/)
 
 ---
 ## Installation
-Use exif_shorescan.yml file 
+Use shorescan.yml file 
 
 Download [Segment-Anything](https://github.com/facebookresearch/segment-anything) and install in conda environment.
 Download [segmentation-gym](https://github.com/Doodleverse/segmentation_gym) and install in conda environment.
@@ -14,12 +14,11 @@ Download [segmentation-gym](https://github.com/Doodleverse/segmentation_gym) and
 ### Install through .yml file
 conda env create --name shorescan -f shorescan_initial_config.yml
 
-
 ### Full install on WSL2 (Ubuntu 24.04.1)
 Start from segmentation-gym install with gym.yml conda env create --name shorescan -f gym.yml
 conda activate shorescan
 sudo apt install libimage-exiftool-perl
-conda install xarray netcdf4 numpy=1.24.* plotly scikit-learn ipykernel OpenCV piexif
+conda install xarray netcdf4 numpy=1.24.* plotly scikit-learn ipykernel opencv piexif
 pip install utm segment-anything pyexiftool onnxruntime onnx
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
@@ -34,7 +33,6 @@ Update to segment-anything-main/segment-anything/build_sam.py line 105
 pytorch version 2.6 requires: ``` state_dict = torch.load(f, weights_only=False) ```
 
 Please download model: sam_vit_h_4b8939.pth from segment-anything and put it in segment-anything-main
-
 
 ## Run
 User prompting:
