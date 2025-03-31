@@ -1,4 +1,4 @@
-name: sample
+name: shorescan
 channels:
   - conda-forge
   - nvidia
