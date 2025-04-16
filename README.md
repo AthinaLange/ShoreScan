@@ -21,7 +21,7 @@ conda env create --name shorescan -f gym.yml
 conda activate shorescan
 sudo apt install libimage-exiftool-perl
 conda install xarray netcdf4 numpy=1.24.* plotly scikit-learn ipykernel opencv piexif
-pip install utm segment-anything pyexiftool onnxruntime onnx
+pip install utm segment-anything pyexiftool onnxruntime onnx ipython rioxarray geopy
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
