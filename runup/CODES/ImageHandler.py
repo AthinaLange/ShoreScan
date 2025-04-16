@@ -9,49 +9,39 @@ Classes:
     - ImageDatastore: Main class for managing ARGUS-style imagery data.
     - ShorelineDatastore: Main class for managing shoreline-related data.
 """
-# Standard Libraries
+
+import json
 import os
 import re
-import json
 import subprocess
-from datetime import datetime, timezone, timedelta
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta
 from pathlib import Path
-from collections import defaultdict, Counter
-
-# GUI & File Dialogs
 from tkinter import Tk
 from tkinter.filedialog import askdirectory
 
-# Numerical & Data Processing
-import numpy as np
-import xarray as xr
-
-# Image Processing
 import cv2
-import piexif
-from PIL import Image
 import exiftool
-
-# Geospatial
-import utm
-import pytz
-
-# Plotting & Visualization
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import piexif
+import pytz
+import rioxarray
+import utm
+import xarray as xr
+from PIL import Image
+from tqdm import tqdm
 
-# Custom Utilities
 import utils_CIRN
 import utils_exif
 import utils_segformer
 import utils_shoreline
-from RunUpTimeseriesFunctions_CHI import *
-from segment_anything import SamPredictor, sam_model_registry
-
+import utils_runup
 
 class ImageHandler:
     """
-    A class to process image data, including reading/writing metadata, rectifying, 
-    extracting shorelines, and saving results as NetCDF files.
+    A class to process image data, including reading/writing metadata, rectifying, extracting shorelines and runup, and saving results as NetCDF files.
     """
 
     def __init__(self, imagePath = None, configPath = None):
@@ -221,18 +211,16 @@ class ImageHandler:
 # -------------Metadata stuff
     def write_metadata(self):
         """
-        Processes timestack images by extracting metadata, 
-        generating EXIF tags, and writing them back to the images.
+        Write metadata into EXIF tags of image.
 
-        :param site: Site object containing directory paths and calibration information.
         :param jsonDir: (str) Directory containing JSON metadata files.
         :param yamlDir: (str) Directory containing YAML calibration files.
         """
 
         yamlDir = self.config.get("yamlDir", os.path.join(os.getcwd(), 'YAML'))
         jsonDir = self.config.get("jsonDir", os.path.join(os.getcwd(), 'JSON'))
-        # Load JSON Tags
 
+        # Load JSON Tags
         json_tags = utils_exif.loadMultiCamJson(self.site, self.camera, jsonDir)
 
         # Prepare EXIF Data
@@ -261,6 +249,12 @@ class ImageHandler:
                 et.execute(f'-keywords{"+" if k else ""}={keyword}', self.image_path, "-P", "-overwrite_original")
 
     def read_metadata(self):
+        """
+        Extract metadata from EXIF tags in images.
+
+        :return: (dict) Dictionary of extrinsics, intrinsics, transect U,V
+                         self.metadata = {"extrinsics": extrinsics, "intrinsics": intrinsics, "transect": {"U": U, "V": V, "transect_date": transect_date}}
+        """
         image_data = Image.open(self.image_path)
         exif_data = piexif.load(image_data.info.get("exif", b""))
         user_comment_raw = exif_data.get("Exif", {}).get(piexif.ExifIFD.UserComment, b"")
@@ -304,7 +298,12 @@ class ImageHandler:
         self.metadata = {"extrinsics": extrinsics, "intrinsics": intrinsics, "transect": {"U": U, "V": V, "transect_date": transect_date}}
         
 # ------------- Products stuff
-    def rectify_image(self):
+    def rectify_image(self, dem_flag = False):
+        """
+        Rectifies an oblique image to a ground-referenced grid using camera calibration and site metadata.
+
+        :param dem_flag (bool): If True, use a DEM to adjust the elevation of the rectified grid.
+        """
 
         if self.image_type in {"snap", "timex", "bright", "dark", "var"}:
             print(f"Rectifying image: {self.image_name}")
@@ -321,16 +320,31 @@ class ImageHandler:
                 products_grid = products
             else:
                 products_grid = None  # If neither, return None
-
+            
+            # Get x,y local and world coordinates of grid in products_grid
             output_grid = utils_CIRN.get_xy_coords(products_grid)
-            UV_coords = utils_CIRN.get_uv_coords(output_grid, self.metadata['intrinsics'], self.metadata['extrinsics'])
-            output_grid = utils_CIRN.get_pixels(output_grid, UV_coords, self.image)
 
+            # Get corrected coordaintes on DEM
+            if dem_flag is True:
+                demPath = self.config.get("demPath")
+                dem = rioxarray.open_rasterio(demPath, masked=True)
+                interp_func = utils_CIRN.get_interp_dem(dem)
+                ab = interp_func((output_grid['transect_0']['xyz'][:,0], output_grid['transect_0']['xyz'][:,1]))
+                output_grid['transect_0']['xyz'][:,2] = ab
+                output_grid['transect_0']['Elevation'] = np.reshape(output_grid['transect_0']['xyz'][:,2], output_grid['transect_0']['Eastings'].shape)
+            
+            # Get corresponding UV coordinates for grid
+            UV_coords = utils_CIRN.get_uv_coords(output_grid, self.metadata['intrinsics'], self.metadata['extrinsics'])
+            # Extract pixesl for UV coordinates
+            output_grid = utils_CIRN.get_pixels(output_grid, UV_coords, self.image)
+            Ir = output_grid['transect_0']['Ir']                         
+
+            # Get origin
             if any(key not in products_grid or np.isnan(products_grid.get(key, np.nan)) for key in ['east', 'north', 'zone']):
                 easting, northing, zone,_ = utm.from_latlon(products_grid['lat'], products_grid['lon'])
             else: 
                 easting, northing, zone = products_grid['east'], products_grid['north'], products_grid['zone']
-            Ir = output_grid['transect_0']['Ir']                         
+
             # Store rectified data inside the class
             self.processing_results['rectified_image'] = {
                 "Ir": np.array(Ir).astype(np.uint8),  
@@ -338,7 +352,7 @@ class ImageHandler:
                 "localY": output_grid['transect_0']['localY'].tolist(),
                 "Eastings": output_grid['transect_0']['Eastings'].tolist(),
                 "Northings": output_grid['transect_0']['Northings'].tolist(),
-                "Z": output_grid['transect_0']['Z'].tolist(),
+                "Elevation": output_grid['transect_0']['Elevation'].tolist(),
                 "Origin_Easting": easting,
                 "Origin_Northing": northing,
                 "Origin_UTMZone": zone,
@@ -352,8 +366,16 @@ class ImageHandler:
 
 # ------------- Timestack stuff
     def run_segformer_on_timestack(self):       
-        
-        if self.transect:
+        """
+        Runs the SegFormer model on a grayscale flipped timestack image to prepare it for shoreline/runup extraction.
+
+        The process:
+            - Convert RGB timestack to grayscale and flipped image.
+            - Loads and executes the SegFormer segmentation model (.npz files saved to grayscale/meta).
+
+        """
+        if self.transect is not None or self.transect==0:
+            print(f'Running Segformer for {self.image_name}')
             # Segformer format - flipped from ARGUS and grayscale
             grayscale_image = cv2.cvtColor(cv2.flip(self.image, 1), cv2.COLOR_RGB2GRAY)
             grayscaleDir = self.config.get("grayscaleDir", os.path.join(os.getcwd(), "grayscale"))
@@ -372,29 +394,34 @@ class ImageHandler:
 
             # Run SegFormer model
             segformerCodeDir = self.config.get("segformerCodeDir", os.getcwd())
+            print(segformerCodeDir)
             subprocess.call(['python', os.path.join(segformerCodeDir, 'segformer.py'), grayscaleDir, weights], stderr=subprocess.PIPE, stdout=subprocess.PIPE, )
 
     def get_runup_from_segformer(self, runup_val = 0.0, rundown_val = -1.5, save_overlay = True):
         """
-        Integrates the `extract_runup` function into the class. It runs shoreline runup extraction on the timestacks.
+        Extracts wave runup line from SegFormer output, saves to .txt file and optionally saves an overlay image.
 
         :param runup_val: (float) Runup threshold (default: 0).
         :param rundown_val: (float) Rundown threshold (default: -1.5).
         :param save_overlay: (bool) Save overlays as image or not.
-        """
+        """ 
     
         runup_val = self.config.get("runup_val", runup_val)
         rundown_val = self.config.get("rundown_val", rundown_val)
         grayscaleDir = self.config.get("grayscaleDir", os.path.join(os.getcwd(), "grayscale"))
 
+        # Find .npz files that have been run
         try:
             tomatch_files = {Path(f).stem for f in os.listdir(os.path.join(grayscaleDir, 'meta')) if f.endswith('.npz')}
         except:
             print(f'No matching files in {os.path.join(grayscaleDir, "meta")} for {self.image_name}.')
             return None
+        
+        # If there's a matching .npz file to image
         if self.image_name+".flipped_grayscale_res" in tomatch_files:
             npz_data = np.load(os.path.join(grayscaleDir, 'meta', self.image_name +".flipped_grayscale_res.npz"))
             av_prob_stack = npz_data["av_prob_stack"]
+
             # Runup extraction using softmax-like segmentation image
             try:
                 Ri, _, _, _, _, _ = utils_segformer.get_SegGym_runup_pixel_timeseries(av_prob_stack, rundown_val, runup_val, buffer = [0,2])
@@ -405,6 +432,7 @@ class ImageHandler:
 
                 outputDir = self.config.get("runupDir", os.path.join(os.getcwd(), "runup"))
                 os.makedirs(outputDir, exist_ok=True)  # Create directory if it doesn't exist
+                # Save overlay image
                 if save_overlay is True:
                     for i in range(1, len(Ri)):
                         # Skip if the current or previous point is NaN
@@ -419,6 +447,7 @@ class ImageHandler:
                     plt.imsave(output_path, I)
                     print(f"Saved overlay image: {output_path}")
 
+                # Save runup coordinates to .txt file
                 txt_output_path = os.path.join(outputDir, f"runup_{self.image_name}.txt")
                 with open(txt_output_path, 'w') as f:
                     for value in Ri:
@@ -434,36 +463,88 @@ class ImageHandler:
                 }
             except:
                 print(f'Issue getting runup for {self.image_name}.')
+        else:
+            folder = os.path.join(grayscaleDir, 'meta')
+            print(f'No matching .npz file in {folder} for {self.image_name}.')
 
-    def compute_runup(self):
-        extrinsics, intrinsics, transect_info = self.metadata['extrinsics'], self.metadata['intrinsics'], self.metadata['transect']
-        U = np.array(transect_info.get("U", []))
-        V = np.array(transect_info.get("V", []))
-        transect_date = transect_info.get("transect_date", [])
+    def compute_runup(self, max_error = 0.1, dem = None, tide = None, Hz = 2,f_lims = np.array([0.004, 0.05, 0.35])):
+        """
+        Computes the physical runup time series from segmented pixel coordinates and camera metadata.
+
+        :param max_error (float): Maximum allowable elevation interpolation error when using the DEM. Default is 0.1 meters.
+        :param dem (xarray.Dataset, optional): Preloaded DEM. If None, it will be loaded using the config path.
+        :param tide (float, optional): Tide level to subtract from total water level (TWL). If None, TWL forecast data is used.
+        :param Hz (int): Sampling frequency of the image timestack in Hz. Default is 2.
+        :param f_lims (np.ndarray): Frequency bands [SS_upper, SS/IG_boundary, IG_lower] used in spectral calculations.
+
+        """
         
-        h_runup_id = np.around(self.processing_results['runup']['Ri']).astype(int)
+        print('Getting runup')
+        U = np.array(self.metadata['transect'].get("U", []))
+        V = np.array(self.metadata['transect'].get("V", []))
+        transect_date = self.metadata['transect'].get("transect_date", datetime(1970, 1, 1))
+        transect_date = transect_date if transect_date is not None else datetime(1970, 1, 1)
+        
+        Ri = self.processing_results['runup']['Ri'].astype(int)
 
-        # Get DEM and compute shoreline elevation
-        DEM = 0#utils_CIRN.get_DEM(date = date, site = site, camNum = camera, transectNum = transectNum)
-        xyz = np.zeros((3,3))#utils_CIRN.dist_uv_to_xyz(intrinsics, extrinsics, np.column_stack((U, V)), 'z', DEM['z'])
-        Hrunup = U#xyz[h_runup_id, 0:1]
-        Zrunup = V#xyz[h_runup_id, 2]
+        # Get Products and DEM
+        dem = dem if dem is not None else rioxarray.open_rasterio(self.config.get("demPath"), masked=True)
         
         productsPath = self.config.get("productsPath", {}) or utils_CIRN.prompt_for_directory("Select the products JSON file")
         if not productsPath.endswith('.json'):
             productsPath = os.path.join(productsPath, "products.json")  # Append 'products.json' if it's a directory
-
         with open(productsPath, "r") as file:
             products = json.load(file)
-        if isinstance(products, list):
-            products_grid = next((item for item in products if item.get("type") == "Grid"), None)
-        # If products is already a dictionary, assume it's the desired item
-        elif isinstance(products, dict) and products.get("type") == "Grid":
-            products_grid = products
-        else:
-            products_grid = None  # If neither, return None
-        easting, northing, zone,_ = utm.from_latlon(products_grid['lat'], products_grid['lon'])
+        products_grid = products if isinstance(products, dict) else (products[0] if isinstance(products, list) else None)
+
+        # Get origin
+        if any(key not in products_grid or np.isnan(products_grid.get(key, np.nan)) for key in ['east', 'north', 'zone']):
+            easting, northing, zone,_ = utm.from_latlon(products_grid['lat'], products_grid['lon'])
+        else: 
+            easting, northing, zone = products_grid['east'], products_grid['north'], products_grid['zone']
             
+        if isinstance(self.config, dict) and 'f_lims' in self.config:
+            f_lims = self.config.get('f_lims', f_lims)
+        
+        # Convert UV coordiantes to xyz at z=0
+        transect_data = {}
+        transect_data['xyz'] = utils_CIRN.uv_to_xyz(self.metadata['intrinsics'], self.metadata['extrinsics'], U, V, 'z', known_val = 0)
+        transect_data['local_grid_origin'] = np.array([products_grid['east'], products_grid['north']])
+        transect_data['local_grid_angle'] = products_grid['angle']
+
+        # Update with xyz with z = DEM
+        transect_data, _ = utils_CIRN.get_elevations(dem, self.metadata['extrinsics'], transect_data, max_error = max_error)
+
+        Hrunup_utm = np.column_stack((transect_data['Eastings'][Ri], transect_data['Northings'][Ri]))
+        Hrunup_local = np.column_stack((transect_data['localX'][Ri], transect_data['localY'][Ri]))
+        TWL = transect_data['Elevation'][Ri]
+
+        # Get tide from TWL forecast
+        if tide is None:
+            print('getting tide')
+            d = utils_runup.fetch_water_level_data(timestamp = self.datetime.strftime('%Y-%m-%d'), 
+                                    region_choice = self.config.get('twl_region'), site_id = self.config.get('site_id'),
+                                    lat = products_grid['lat'], lon = products_grid['lon'],
+                                    distance_m=500, save_folder=self.config.get('twlDir', 'data_twl'))
+            
+            closest_index = min(enumerate(d['dateTime']), key=lambda x: abs(x[1] - datetime(2025,3, 10, 12,00,00)))[0]
+            TWL_forecast = {key: values[closest_index] for key, values in d.items()}
+            
+            tide = TWL_forecast['tideWindSetup']
+        else:
+            TWL_forecast = {}
+            TWL_forecast['tide'] = tide
+        
+        # Vertical runup is TWL - tide
+        Zrunup = TWL - tide
+        # Compute runup statistics
+        t_sec = np.arange(np.max(Zrunup.shape))/Hz
+        grd = {}
+        grd['x'] = transect_data['localX']
+        grd['z'] = transect_data['Elevation']
+        TWL_stats = utils_runup.runupStatistics_CHI(Zrunup, t_sec, 2.5*60*Hz, f_lims = f_lims, grd = grd)
+
+        # Save to dictionary
         self.processing_results['runup'].update(
             {"U": U,
              "V": V,
@@ -471,28 +552,37 @@ class ImageHandler:
              "Origin_Northing": northing,
              "Origin_UTMZone": zone,
              "Origin_Angle": products_grid["angle"],
-             "DEM": DEM,
-             "Eastings": xyz[:,0],
-             "Northings": xyz[:,1],
-             "Z": xyz[:,2],
-             "Hrunup": Hrunup,
-             "Zrunup": Zrunup,
-             "transect_date_definition": transect_date
+             "Eastings": transect_data['Eastings'],
+             "Northings": transect_data['Northings'],
+             "Elevation": transect_data['Elevation'],
+             "localX": transect_data['localX'],
+             "localY": transect_data['localY'],
+             "Hrunup_utm": Hrunup_utm,
+             "Hrunup_local": Hrunup_local,
+             "TWL": TWL,
+             "transect_date_definition": transect_date,
+             "DEM_max_error": max_error,
+             "TWL_stats": TWL_stats,
+             "TWL_forecast": TWL_forecast
         }
         )
 
 # ------------- Shoreline stuff
     def process_bright(self, make_plots = False):
         """
-        Process a single 'bright' image.
-        
-        This method follows the workflow specific to 'bright' image types. It performs the following steps:
-        1. Extract bottom boundaries from the image in three attempts (using SAM).
-        2. Apply a watershed segmentation to the image based on SAM shoreline.
-        3. Compute RMSE between watershed coordinates and SAM shoreline.
-        4. Plot and store the results.
+        Processes a 'bright' image to detect the shoreline using SAM and watershed segmentation.
 
-        :return: (ShorelineDatastore) The updated shoreline datastore after processing the image.
+        Workflow:
+            1. Predicts shoreline 3 times using Segment Anything Model (SAM).
+            2. Extracts bottom boundary of shoreline mask.
+            3. Computes a median shoreline.
+            4. Applies watershed segmentation to validate shoreline position.
+            5. Calculates RMSE between watershed and predicted shoreline.
+            6. Optionally plots and saves visualizations.
+            7. Saves all shoreline-related data to `self.processing_results`.
+
+        :param make_plots (bool): If True, saves diagnostic plots for SAM and watershed results.
+
         """
         print(f"Getting shoreline for bright image: {self.image_name}")
 
@@ -542,6 +632,7 @@ class ImageHandler:
         utils_shoreline.plot_image_and_shoreline(self.image_path, shoreline_coords = shoreline_coords, watershed_coords = watershed_coords, y_distance = y_distance, save_dir = saveDir)
         plt.close()
 
+        # Save to dictionary
         self.processing_results['shoreline'] = {
             "U_coords": bottom_boundaries[0][:, 0],
             "shoreline_coords" : shoreline_coords,
@@ -555,12 +646,23 @@ class ImageHandler:
     
     def process_timex(self, bright_coords = None, make_plots = False):
         """
-        Process a single 'timex' image.
-        
-        This method follows the workflow specific to 'timex' image types. It uses the results from the 'bright' image 
-        processing and follows similar steps to the 'bright' workflow.
+        Processes a 'timex' image to detect the shoreline using SAM and watershed segmentation.
 
-        :return: (ShorelineDatastore) The updated shoreline datastore after processing the image.
+        This function is similar to `process_bright`, but optionally uses shoreline from the associated bright image 
+        as a reference to guide segmentation. Useful for consistency in multi-frame analysis.
+
+        Workflow:
+            1. Predicts shoreline 3 times using SAM.
+            2. Extracts bottom boundary of the mask each time.
+            3. Computes a median shoreline.
+            4. Applies watershed segmentation.
+            5. Calculates RMSE and filters out inaccurate sections.
+            6. Optionally plots and saves visualizations.
+            7. Saves results to `self.processing_results`.
+
+            
+        :param bright_coords (dict, optional): Output from `process_bright` containing reference shoreline coordinates.
+        :param make_plots (bool): If True, saves diagnostic plots.
         """
         print(f"Getting shoreline for timex image: {self.image_name}")
         modelDir = self.config.get("segmentAnythingDir") if self.config else askdirectory(title="Select folder for Segment Anything folder.")
@@ -621,23 +723,62 @@ class ImageHandler:
         }
         print("Timex image processing complete.")
 
-    def rectify_shoreline(self, tide = 0):
-        Ud, Vd = self.processing_results['shoreline'].get('shoreline_coords',[])
-        # tide?
-        shoreline_xyz = utils_CIRN.dist_uv_to_xyz(self.metadata['intrinsics'], self.metadata['extrinsics'], Ud, Vd, 'z', known_val = tide)
-        self.processing_results['shoreline'].update(
-            {"rectified_shoreline": shoreline_xyz,
-             "tide": tide
-            }
-        )
+    def rectify_shoreline(self, dem = None):
+        """
+        Projects detected shoreline pixel coordinates onto real-world coordinates using camera calibration and a DEM.
+
+        :param dem (xarray.Dataset, optional): Digital Elevation Model. If not provided, it's loaded based on config.
+
+        """
+        shoreline_coords = self.processing_results['shoreline'].get('shoreline_coords')
+        if shoreline_coords is not None:
+            Ud, Vd = shoreline_coords[:, 0], shoreline_coords[:, 1]
+
+            # Get products grid
+            productsPath = self.config.get("productsPath") or utils_CIRN.prompt_for_directory("Select the products JSON file")
+            if not productsPath.endswith('.json'):
+                productsPath = os.path.join(productsPath, "products.json")  # Append 'products.json' if it's a directory
+            with open(productsPath, "r") as file:
+                products = json.load(file)
+            products_grid = products if isinstance(products, dict) else (products[0] if isinstance(products, list) else None)
+            # Get origin
+            if any(key not in products_grid or np.isnan(products_grid.get(key, np.nan)) for key in ['east', 'north', 'zone']):
+                easting, northing, zone,_ = utm.from_latlon(products_grid['lat'], products_grid['lon'])
+            else: 
+                easting, northing, zone = products_grid['east'], products_grid['north'], products_grid['zone']
+            
+            # Pull DEM
+            dem = dem if dem is not None else rioxarray.open_rasterio(self.config.get("demPath"), masked=True)
+            
+            # Convert UV coordiantes to xyz at z=0
+            shoreline_data = {}
+            shoreline_data['xyz'] = utils_CIRN.uv_to_xyz(self.metadata['intrinsics'], self.metadata['extrinsics'], Ud, Vd, 'z', known_val = 0)
+            shoreline_data['local_grid_origin'] = np.array([easting, northing])
+            shoreline_data['local_grid_angle'] = products_grid['angle']
+            # Update with xyz with z = DEM
+            shoreline_data, _ = utils_CIRN.get_elevations(dem, self.metadata['extrinsics'], shoreline_data)
+
+            # Save to dictionary
+            self.processing_results['shoreline'].update(
+                {"rectified_shoreline": shoreline_data["Elevation"],
+                "localX": shoreline_data['localX'].tolist(),
+                "localY": shoreline_data['localY'].tolist(),
+                "Eastings": shoreline_data['Eastings'].tolist(),
+                "Northings": shoreline_data['Northings'].tolist(),
+                "Elevation": shoreline_data['Elevation'].tolist(),
+                "Origin_Easting": easting,
+                "Origin_Northing": northing,
+                "Origin_UTMZone": zone,
+                "Origin_Angle": products_grid["angle"]
+                }
+            )
         return None
+
 # ------------- Saving
     def save_to_netcdf(self):
         """
-        Saves all available data from the ImageHandler class to a NetCDF file, 
-        including the image, metadata, rectification data, and configuration settings.
+        Saves all available data from the ImageHandler class to a NetCDF file, including the image, metadata, rectification data, and configuration settings.
 
-        :param output_path: (str) Path to save the NetCDF file.
         """
         if self.image is None:
             raise ValueError("No image loaded.")
@@ -696,7 +837,7 @@ class ImageHandler:
                 "local_timezone": site["siteInfo"]["timezone"],
                 "verticalDatum":  site['siteInfo']['verticalDatum'],
                 "verticalDatum_description": "North America Vertical Datum of 1988 (NAVD 88)",
-                "freqLimits": site["sampling"]["freqLimits"],
+                "freqLimits": self.config.get('f_lims', [0.004, 0.04, 0.35]),
                 "freqLimits_description": "Frequency limits on sea-swell and infragravity wave band (Hz). [SS upper, SS/IG, IG lower]",
             
                 "datetime": str(self.datetime),
@@ -808,14 +949,14 @@ class ImageHandler:
                         "max_value" : np.around(np.array(rectified_image.get("Northings", [])).max(), decimals=3),
                         "description" : f'Cross-shore coordinates of data in the rectified image projected onto the beach surface at {self.site}. Described using UTM Zone {site["siteInfo"]["utmZone"]} Northing in meters.',
                     },
-                    "Z":{
+                    "Elevation":{
                         "long_name" : 'elevation',
                         "units" : 'meters',
                         "coordinates": 'X,Y',
                         "description" : f'Elevation (z-value) in {site["siteInfo"]["verticalDatum"]} of rectified image projected onto the beach surface at {self.site}.',
                         "datum": site["siteInfo"]["verticalDatum_description"],
-                        "min_value" : np.around(np.nanmin(np.array(rectified_image.get("Z", []))), decimals=3),
-                        "max_value" : np.around(np.nanmax(np.array(rectified_image.get("Z", []))), decimals=3)
+                        "min_value" : np.around(np.nanmin(np.array(rectified_image.get("Elevation", []))), decimals=3),
+                        "max_value" : np.around(np.nanmax(np.array(rectified_image.get("Elevation", []))), decimals=3)
                     }
             })
 
@@ -824,18 +965,16 @@ class ImageHandler:
             })
 
             data_vars.update({"Ir": (["X_dim", "Y_dim", "Color_dim"], np.array(rectified_image.get("Ir", []), dtype=np.uint8), products_attrs["Ir"]),
-                            "localX": (["X_dim", "Y_dim"], np.around(np.array(rectified_image.get("localX", [])), decimals=3), products_attrs["localX"]),
-                            "localY": (["X_dim", "Y_dim"], np.around(np.array(rectified_image.get("localY", [])), decimals=3), products_attrs["localY"]),
-                            "Eastings": (["X_dim", "Y_dim"], np.around(np.array(rectified_image.get("Eastings", [])), decimals=3), products_attrs["Eastings"]),
-                            "Northings": (["X_dim", "Y_dim"], np.around(np.array(rectified_image.get("Northings", [])), decimals=3), products_attrs["Northings"]),
-                            "Z": (["X_dim", "Y_dim"], np.around(np.array(rectified_image.get("Z", [])), decimals=3), products_attrs["Z"]),
+                            "localX_grid": (["X_dim", "Y_dim"], np.around(np.array(rectified_image.get("localX", [])), decimals=3), products_attrs["localX"]),
+                            "localY_grid": (["X_dim", "Y_dim"], np.around(np.array(rectified_image.get("localY", [])), decimals=3), products_attrs["localY"]),
+                            "eastings_grid": (["X_dim", "Y_dim"], np.around(np.array(rectified_image.get("Eastings", [])), decimals=3), products_attrs["Eastings"]),
+                            "northings_grid": (["X_dim", "Y_dim"], np.around(np.array(rectified_image.get("Northings", [])), decimals=3), products_attrs["Northings"]),
+                            "elevation_grid": (["X_dim", "Y_dim"], np.around(np.array(rectified_image.get("Elevation", [])), decimals=3), products_attrs["Elevation"]),
             })
     
         if shoreline: 
             print("Saving shoreline")
-            global_attrs.update({"tide": shoreline.get("tide", 0),
-                                "tide_description": f"tide level used in projection, {site['siteInfo']['verticalDatum']}m",
-                                "SAM_model": shoreline.get("model",{})
+            global_attrs.update({"SAM_model": os.path.basename(shoreline.get("model",{}))
             })
             
             dims.update({"XYZ_dim": 3,
@@ -844,11 +983,14 @@ class ImageHandler:
             })
            
             products_attrs.update({
-                    "shoreline_rectified_coords":{
-                        "long_name": 'UTM coordinates of shoreline from oblique image.',
-                        "description":'Rectified shoreline coordinates on UTM using calculated EO and IO. Projected to given tide level.',
-                        "coordinates": 'X, Y, Z',
-                        "grid_mapping": 'crs_utm crs_wgs84 crs_local'
+                    "shoreline_elevation":{
+                        "long_name" : f'elevation of shoreline detected from {self.image_name}',
+                        "units" : 'meters',
+                        "coordinates": 'X,Y',
+                        "description" : f'Elevation of the shoreline (z-value) in {site["siteInfo"]["verticalDatum"]} of rectified image projected onto the beach surface at {self.site}.',
+                        "datum": site["siteInfo"]["verticalDatum_description"],
+                        "min_value" : np.around(np.nanmin(np.array(shoreline.get("rectified_shoreline", []))), decimals=3),
+                        "max_value" : np.around(np.nanmax(np.array(shoreline.get("rectified_shoreline", []))), decimals=3)
                     },
                     "shoreline_pixel_coords":{
                         "long_name": '[U,V] coordinates of the shoreline from the oblique image.',
@@ -880,26 +1022,60 @@ class ImageHandler:
                         "min_value" : np.around(np.array(shoreline.get("rmse_value", [])).min(), decimals=3),
                         "max_value" : np.around(np.array(shoreline.get("rmse_value", [])).max(), decimals=3),
                         "description" : "Provides general estimate of error of shoreline prediction.",
+                    },
+                    "localX":{
+                        "long_name": "Local cross-shore coordinates in meters of shoreline.",
+                        "min_value": np.around(np.array(shoreline.get("localX", [])).min(), decimals=3),
+                        "max_value": np.around(np.array(shoreline.get("localX", [])).min(), decimals=3),
+                        "units": "meters",
+                        "description":" Local cross-shore coordinates in meters of rectified shoreline. Rotated based on shorenormal angle and origin. ",
+                        },
+                    "localY":{
+                        "long_name": "Local along-shore coordinates in meters of shoreline.",
+                        "min_value": np.around(np.array(shoreline.get("localY", [])).min(), decimals=3),
+                        "max_value": np.around(np.array(shoreline.get("localY", [])).min(), decimals=3),
+                        "units": "meters",
+                        "description":" Local along-shore coordinates in meters of rectified shoreline. Rotated based on shorenormal angle and origin. ",
+                    },
+                    "eastings":{
+                        "long_name" : f"Universal Transverse Mercator Zone {utmzone} Easting coordinate of rectified shoreline",
+                        "units" : 'meters',
+                        "min_value" : np.around(np.array(shoreline.get("Eastings", [])).min(), decimals=3),
+                        "max_value" : np.around(np.array(shoreline.get("Eastings", [])).max(), decimals=3),
+                        "description" : f'Cross-shore coordinates of data in the rectified shoreline projected onto the beach surface at {self.site}. Described using UTM Zone {site["siteInfo"]["utmZone"]} Easting in meters.',
+                    },
+                    "northings":{
+                        "long_name" : f"Universal Transverse Mercator Zone {utmzone} Northing coordinate of rectified shoreline",
+                        "units" : 'meters',
+                        "min_value" : np.around(np.array(shoreline.get("Northings", [])).min(), decimals=3),
+                        "max_value" : np.around(np.array(shoreline.get("Northings", [])).max(), decimals=3),
+                        "description" : f'Cross-shore coordinates of data in the rectified shoreline projected onto the beach surface at {self.site}. Described using UTM Zone {site["siteInfo"]["utmZone"]} Northing in meters.',
                     }
+                    
             })
 
-            data_vars.update({"shoreline_rectified_coords": (["U_dim", "XYZ_dim"], np.array(shoreline.get("rectified_shoreline", np.full((dims["U_dim"], 3), np.nan))), products_attrs["shoreline_rectified_coords"]),
+            data_vars.update({"elevation_shoreline": (["U_dim"], np.around(np.array(shoreline.get("rectified_shoreline", [])), decimals=3), products_attrs["shoreline_elevation"]),
+                              "localX_shoreline": (["U_dim"], np.around(np.array(shoreline.get("localX", [])), decimals=3), products_attrs["localX"]),
+                              "localY_shoreline": (["U_dim"], np.around(np.array(shoreline.get("localY", [])), decimals=3), products_attrs["localY"]),
+                              "eastings_shoreline": (["U_dim"], np.around(np.array(shoreline.get("Eastings", [])), decimals=3), products_attrs["eastings"]),
+                              "northings_shoreline": (["U_dim"], np.around(np.array(shoreline.get("Northings", [])), decimals=3), products_attrs["northings"]),
                               "shoreline_pixel_coords": (["U_dim", "UV_dim"], np.array(shoreline.get("shoreline_coords",[])), products_attrs["shoreline_pixel_coords"]),
                               "bottom_boundary_attemps": (["U_dim", "dim_4"], np.array(shoreline.get("bottom_boundary",[])), products_attrs["bottom_boundary"]),
                               "watershed_coords": (["U_dim", "UV_dim"], np.array(shoreline.get("watershed_coords",[])), products_attrs["watershed_coords"]),
                               "y_distance": (["U_dim"], np.array(shoreline.get("y_distance",[])), products_attrs["y_distance"]),
-                              "rmse_value": ([], np.array(shoreline.get("rmse_value",[])), products_attrs["rmse_value"])
+                              "rmse_value": ([], np.array(shoreline.get("rmse_value",[])), products_attrs["rmse_value"]),
             })  
             
         if runup:
             print("Saving runup")
-            TWLstats = runup.get('TWLstats')
+            TWLstats = runup.get('TWL_stats',{})
+            TWLforecast = runup.get('TWL_forecast',{})
             verticalDatum = site['siteInfo']['verticalDatum']
-            freqLimits = site['sampling']['freqLimits']
-
+            freqLimits = self.config.get('f_lims', [0.004, 0.04, 0.35])
+            transect_date = runup.get("transect_date_definition", datetime(1970,1,1)).strftime("%Y%m%d")
             t_sec = np.around(np.arange(0, sample_period_length*60, 1/sample_frequency_Hz)[:self.image.shape[0]], decimals=3) # timeseries in seconds
-            T = np.array([self.datetime + timedelta(seconds = t) for t in t_sec])
-
+            T = np.array([self.datetime + timedelta(seconds = t) for t in t_sec], dtype = np.datetime64)
+           
             global_attrs.update({"origin_easting": runup.get("Origin_Easting", np.nan),
                                 "origin_northing": runup.get("Origin_Northing", np.nan),
                                 "origin_UTMZone": runup.get("Origin_UTMZone", np.nan),
@@ -907,18 +1083,25 @@ class ImageHandler:
                                 "origin_angle_units": "degrees",
                                 "tide": runup.get("tide", np.nan),
                                 "tide_description": f"tide level used in projection, {site['siteInfo']['verticalDatum']}m",
-                                "transect_date_definition": runup.get("transect_date_definition"),
-                                "transect_date_description": "date where U,V coordinates were defined based on recent EO."
+                                "transect_date_definition": runup.get("transect_date_definition", datetime(1970,1,1)).strftime("%Y%m%d"),
+                                "transect_date_description": "date where U,V coordinates were defined based on recent EO.",
+                                "DEM_max_error": runup.get("DEM_max_error", np.nan),
+                                "DEM_max_error_description": "maximum error between interpolated elevation and DEM (meters).",
+                                "twl_time": TWLforecast['dateTime'].strftime('%Y-%m-%d %H:%M:%S'),
+                                "twl_time_description": "TWL Forecast time"
             })
             
-            dims.update({"X_dim": np.shape(self.image)[0],
-                        "T_dim": np.shape(self.image)[1],
-                        "TWLstats_dim": runup.get('TWLstats').get('S', np.array([])).size
-            })
-
-            coords.update({"X_dim": ("X_dim", np.arange(dims["X_dim"])),
-                           "T_dim": T
-            })
+            dims = {"X_dim": np.shape(self.image)[1],
+                        "T_dim": np.shape(self.image)[0],
+                        #"TWLstats_dim": runup.get('TWLstats').get('S', np.array([])).size,
+                        "XY_dim": 2,
+                        "Color_dim": np.shape(self.image)[2]
+            }
+            
+            coords = {"X_dim": ("X_dim", np.arange(dims["X_dim"])),
+                      "T_dim": ("T_dim", T),
+                      "Color_dim": ("Color_dim", np.arange(dims["Color_dim"]))
+            }
 
             products_attrs.update({
                                 "I":{
@@ -954,54 +1137,72 @@ class ImageHandler:
                                     "description": f"Pixel coordinate along the vertical axis (time) of the image where timestack was sampled at {self.site}. Obtained from image collection beginning {transect_date}",
                                 },
                                 "T": {
-                                "standard_name": "time",
+                                    "standard_name": "time",
                                     "long_name": "datetime",
                                     "format": "YYYY-MM-DD HH:mm:SS+00:00",
                                     "time_zone": "UTC",
                                     "description": "Times that pixels were sampled to create the timestack. The dimension length is the number of samples in the timestack. Each sample has a time value represented as a datetime.",
                                     "sample_freq": f"{sample_frequency_Hz} Hertz",
                                     "sample_length_interval": f"{sample_period_length*60} seconds",
-                                    "min_value": T[0].isoformat(),
-                                    "max_value": T[-1].isoformat(),
+                                    "min_value": pd.to_datetime(T[0]).isoformat(),
+                                    "max_value": pd.to_datetime(T[-1]).isoformat(),
                                 },
                                 "Eastings":{
-                                    "long_name" : f"Universal Transverse Mercator Zone {utmZone} Easting coordinate of cross-shore timestack pixels",
+                                    "long_name" : f"Universal Transverse Mercator Zone {utmzone} Easting coordinate of cross-shore timestack pixels",
                                     "units" : 'meters',
                                     "min_value" : np.around(np.min(runup.get("Eastings",[])), decimals=3),
                                     "max_value" : np.around(np.max(runup.get("Eastings",[])), decimals=3),
-                                    "description" : f'Eastings coordinates of data in the timestack pixels projected onto the beach surface at {self.site}. Described using UTM Zone {utmZone} Easting in meters.',
+                                    "description" : f'Eastings coordinates of data in the timestack pixels projected onto the beach surface at {self.site}. Described using UTM Zone {utmzone} Easting in meters.',
                                 },
                                 "Northings":{
-                                    "long_name" : f'Universal Transverse Mercator Zone {utmZone} Northing coordinate of cross-shore timestack pixels',
+                                    "long_name" : f'Universal Transverse Mercator Zone {utmzone} Northing coordinate of cross-shore timestack pixels',
                                     "units" : 'meters',
                                     "min_value" : np.around(np.min(runup.get("Northings",[])), decimals=3),
                                     "max_value" : np.around(np.max(runup.get("Northings",[])), decimals=3),
-                                    "description" : f'Northings coordinates of data in the timestack pixels projected onto the beach surface at {self.site}. Described using UTM Zone {utmZone} Northing in meters.',
+                                    "description" : f'Northings coordinates of data in the timestack pixels projected onto the beach surface at {self.site}. Described using UTM Zone {utmzone} Northing in meters.',
                                 },
-                                "Z":{
+                                "Elevation":{
                                     "long_name" : 'Elevation',
                                     "units" : f"{site['siteInfo']['verticalDatum']}m",
                                     "description" : f'Elevation (z-value) in {verticalDatum} of timestack pixels projected onto the beach surface at {self.site}.',
                                     "datum" :site["siteInfo"]["verticalDatum"],
-                                    "min_value" : np.around(np.nanmin(runup.get("Z",[])), decimals=3),
-                                    "max_value" : np.around(np.nanmax(runup.get("Z",[])), decimals=3)
+                                    "min_value" : np.around(np.nanmin(runup.get("Elevation",[])), decimals=3),
+                                    "max_value" : np.around(np.nanmax(runup.get("Elevation",[])), decimals=3)
                                 },
-                                "DEM":{
-                                    "description": "Digital Elevation Model used for runup projection.",
-                                    "units": "meters"
+                                "localX":{
+                                    "long_name": "Local cross-shore coordinates in meters of cross-shore timestack pixels.",
+                                    "min_value": np.around(np.array(runup.get("localX", [])).min(), decimals=3),
+                                    "max_value": np.around(np.array(runup.get("localX", [])).min(), decimals=3),
+                                    "units": "meters",
+                                    "description":" Local cross-shore coordinates in meters of rectified image. Rotated based on shorenormal angle and origin. ",
                                 },
-                                "Hrunup":{
-                                    "long_name": f"[X, Y] coordinates of wave runup in Eastings, Northings for UTM zone {utmZone}.",
-                                    "min_value": [np.min(runup.get('Hrunup',0)[:,0]), np.min(runup.get('Hrunup',0)[:,1])],
-                                    "max_value": [np.max(runup.get('Hrunup',0)[:,0]), np.max(runup.get('Hrunup',0)[:,1])],
+                                "localY":{
+                                    "long_name": "Local along-shore coordinates in meters of cross-shore timestack pixels.",
+                                    "min_value": np.around(np.array(runup.get("localY", [])).min(), decimals=3),
+                                    "max_value": np.around(np.array(runup.get("localY", [])).min(), decimals=3),
+                                    "units": "meters",
+                                    "description":" Local along-shore coordinates in meters of rectified image. Rotated based on shorenormal angle and origin. ",
+                                },
+                                "Hrunup_utm":{
+                                    "long_name": f"[X, Y] coordinates of wave runup in Eastings, Northings for UTM zone {utmzone}.",
+                                    "min_value": [np.min(runup.get('Hrunup_utm',0)[:,0]), np.min(runup.get('Hrunup_utm',0)[:,1])],
+                                    "max_value": [np.max(runup.get('Hrunup_utm',0)[:,0]), np.max(runup.get('Hrunup_utm',0)[:,1])],
                                     "units": "meters ",
                                     "description": "Horizontal coordinates of wave runup as converted from U,V coordinates to Eastings, Northings from EO/IO.",
                                     "coordinates": "X,Y"
                                 },
+                                "Hrunup_local":{
+                                    "long_name": f"[X, Y] coordinates of wave runup in local coordiantes.",
+                                    "min_value": [np.min(runup.get('Hrunup_local',0)[:,0]), np.min(runup.get('Hrunup_local',0)[:,1])],
+                                    "max_value": [np.max(runup.get('Hrunup_local',0)[:,0]), np.max(runup.get('Hrunup_local',0)[:,1])],
+                                    "units": "meters ",
+                                    "description": "Horizontal coordinates of wave runup in a local coordinate system. Rotated based on shorenormal angle and origin.",
+                                    "coordinates": "X,Y"
+                                },
                                 "TWL":{
                                     "long_name": "Total water level elevation timeseries",
-                                    "min_value": float(runup.get('Zrunup',0).min()),
-                                    "max_value": float(runup.get('Zrunup',0).max()),
+                                    "min_value": float(runup.get('TWL',0).min()),
+                                    "max_value": float(runup.get('TWL',0).max()),
                                     "units": f"{site['siteInfo']['verticalDatum']}m",
                                     "description": "Vertical elevation of wave runup (total water level).",
                                 }    
@@ -1016,10 +1217,10 @@ class ImageHandler:
                                 "long_name": "2 percent exceedence value for twl timeseries",
                                 "units": "meters"
                             },
-                            "meanVar":{
+                            "setup":{
                                 "long_name": "mean TWL",
                                 "units": "meters",
-                                "description" : "offshore mean twl + wave setup"
+                                "description" : "wave setup"
                             },
                             "TpeakVar":{
                                 "long_name": "peak swash period",
@@ -1052,25 +1253,92 @@ class ImageHandler:
                             "FrequencyVar":{
                                 "long_name": "runup (or twl) frequency array",
                                 "units": "Hertz"
+                            },
+                            "betaS2006":{
+                                "long_name": "beach slope between +- 2std(twl timeseries)",
+                                "units": "meters",
+                                "description": "as defined in Stockdon et al. (2006)"
+                            },
+                            "betaminmax":{
+                                "long_name": "beach slope between +max(twl timeseries)/-min(twl timesereis)",
+                                "units": "meters"
+                            },
+                            "twl":{
+                                "long_name": "TWL Forecast",
+                                "units": "meters"
+                            },
+                            "twl05":{
+                                "long_name": "TWL Forecast 5% confidence interval",
+                                "units": "meters"
+                            },
+                            "twl95":{
+                                "long_name": "TWL Forecast 95% confidence interval",
+                                "units": "meters"
+                            },
+                            "twl_setup":{
+                                "long_name": "TWL Forecast setup",
+                                "units": "meters"
+                            },
+                            "twl_runup":{
+                                "long_name": "TWL Forecast runup",
+                                "units": "meters"
+                            },
+                            "twl_runup05":{
+                                "long_name": "TWL Forecast runup 5% CI",
+                                "units": "meters"
+                            },
+                            "twl_runup95":{
+                                "long_name": "TWL Forecast 95% CI",
+                                "units": "meters"
+                            },
+                            "twl_tide":{
+                                "long_name": "TWL Forecast tide + wind setup : used for tide",
+                                "units": "meters"
+                            },
+                            "twl_swash":{
+                                "long_name": "TWL Forecast swash",
+                                "units": "meters"
+                            },
+                            "twl_incSwash":{
+                                "long_name": "TWL Forecast incident swash",
+                                "units": "meters"
+                            },
+                            "twl_igSwash":{
+                                "long_name": "TWL Forecast infragravity swash",
+                                "units": "meters"
+                            },
+                            "twl_hs":{
+                                "long_name": "TWL Forecast Ho",
+                                "units": "meters"
+                            },
+                            "twl_pp":{
+                                "long_name": "TWL Forecast Tp",
+                                "units": "sec"
+                            },
+                            "tide":{
+                                "long_name": "tide level set by user",
+                                "units": "meters"
                             }
                 }
 
-            data_vars.update({"I": (["U_dim", "V_dim", "Color_dim"], image_arr, products_attrs["I"]),
+            data_vars.update({"I": (["T_dim", "X_dim", "Color_dim"], image_arr, products_attrs["I"]),
                             "Ri": (["T_dim"], np.array(runup.get("Ri",[])), products_attrs["Ri"]),
                             "runup_val": ([], np.array(runup.get("runup_val",[])), products_attrs["runup_val"]),
                             "rundown_val": ([], np.array(runup.get("rundown_val",[])), products_attrs["rundown_val"]),
                             "U_transect": (["X_dim"], np.array(runup.get("U",[])), products_attrs["U_transect"]),
                             "V_transect": (["X_dim"], np.array(runup.get("V",[])), products_attrs["V_transect"]),
-                            "Eastings": (["X_dim"], np.array(runup.get("Eastings",[])), products_attrs["Eastings"]),
-                            "Northings": (["X_dim"], np.array(runup.get("Northings",[])), products_attrs["Northings"]),
-                            "Z": (["X_dim"], np.array(runup.get("Z",[])), products_attrs["Z"]),
                             "T": (["T_dim"], np.array(T), products_attrs["T"]),
-                            "DEM": ([], np.array(runup.get("DEM",[])), products_attrs["DEM"]),
-                            "Hrunup": (["T_dim", 2], np.array(runup.get("Hrunup",[])), products_attrs["Hrunup"]),
-                            "TWL": (["T_dim"], np.array(runup.get("Zrunup",[])), products_attrs["TWL"]),
+                            "eastings_transect": (["X_dim"], np.array(runup.get("Eastings",[])), products_attrs["Eastings"]),
+                            "northings_transect": (["X_dim"], np.array(runup.get("Northings",[])), products_attrs["Northings"]),
+                            "elevation_transect": (["X_dim"], np.array(runup.get("Elevation",[])), products_attrs["Elevation"]),
+                            "localX_transect": (["X_dim"], np.array(runup.get("localX",[])), products_attrs["localX"]),
+                            "localY_transect": (["X_dim"], np.array(runup.get("localY",[])), products_attrs["localY"]),
+                            "Hrunup_utm": (["T_dim", "XY_dim"], np.array(runup.get("Hrunup_utm",[])), products_attrs["Hrunup_utm"]),
+                            "Hrunup_local": (["T_dim", "XY_dim"], np.array(runup.get("Hrunup_local",[])), products_attrs["Hrunup_local"]),
+                            "TWL": (["T_dim"], np.array(runup.get("TWL",[])), products_attrs["TWL"]),
                             "TWLstats_2exceedence_peaks":([], TWLstats.get('R2', None), TWL_attrs["2exceedence_peaksVar"]),
                             "TWLstats_2exceedence_notpeaks":([], TWLstats.get('eta2', None), TWL_attrs["2exceedence_notpeaksVar"]),
-                            "TWLstats_mean":([], TWLstats.get('setup', None), TWL_attrs["meanVar"]),
+                            "TWLstats_setup":([], TWLstats.get('setup', None), TWL_attrs["setup"]),
                             "TWLstats_Tpeak":([], TWLstats.get('Tp', None), TWL_attrs["TpeakVar"]),
                             "TWLstats_Tmean":([], TWLstats.get('Ts', None), TWL_attrs["TmeanVar"]),
                             "TWLstats_Ssig":([], TWLstats.get('Ss', None), TWL_attrs["SsigVar"]),
@@ -1078,6 +1346,22 @@ class ImageHandler:
                             "TWLstats_Ssig_IG":([], TWLstats.get('Ssig', None), TWL_attrs["Ssig_IGVar"]),
                             "TWLstats_spectrum":(["TWLstats_dim"], np.around(TWLstats.get('S', np.array([])), decimals=6), TWL_attrs["SpectrumVar"]),
                             "TWLstats_frequency":(["TWLstats_dim"], np.around(TWLstats.get('f', np.array([])), decimals=4), TWL_attrs["FrequencyVar"]),
+                            "TWLstats_betaS2006":([], TWLstats.get('beta_S2006', None), TWL_attrs["betaS2006"]),
+                            "TWLstats_beta":([], TWLstats.get('beta_Z', None), TWL_attrs["betaminmax"]),
+                            "twl":([], TWLforecast.get("twl", None), TWL_attrs["twl"]),
+                            "twl05":([], TWLforecast.get("twl05", None), TWL_attrs["twl95"]),
+                            "twl95":([], TWLforecast.get("twl95", None), TWL_attrs["twl05"]),
+                            "twl_setup":([], TWLforecast.get("setup", None), TWL_attrs["twl_setup"]),
+                            "twl_runup":([], TWLforecast.get("runup", None), TWL_attrs["twl_runup"]),
+                            "twl_runup05":([], TWLforecast.get("runup05", None), TWL_attrs["twl_runup05"]),
+                            "twl_runup95":([], TWLforecast.get("runup95", None), TWL_attrs["twl_runup95"]),
+                            "twl_tide":([], TWLforecast.get("tideWindSetup", None), TWL_attrs["twl_tide"]),
+                            "twl_swash":([], TWLforecast.get("swash", None), TWL_attrs["twl_swash"]),
+                            "twl_incSwash":([], TWLforecast.get("incSwash", None), TWL_attrs["twl_incSwash"]),
+                            "twl_igSwash":([], TWLforecast.get("infragSwash", None), TWL_attrs["twl_igSwash"]),
+                            "twl_hs":([], TWLforecast.get("hs", None), TWL_attrs["twl_hs"]),
+                            "twl_pp":([], TWLforecast.get("pp", None), TWL_attrs["twl_pp"]),
+                            "twl_tide":([], TWLforecast.get("tide", None), TWL_attrs["tide"])
             })  
         
         ds = xr.Dataset(
@@ -1098,12 +1382,8 @@ class ImageDatastore:
     """
     A class to manage and process image data stored in a hierarchical folder structure.
 
-    This class handles storing metadata for images in a nested dictionary structure, 
-    allows for image selection, loading, and organizing images based on metadata, 
-    and provides methods for filtering and plotting images.
+    This class handles storing metadata for images in a nested dictionary structure, allows for image selection, loading, and organizing images based on metadata, and provides methods for filtering and plotting images.
 
-    Attributes:
-        images (list): A list of images in the folder
     """
     def __init__(self, configPath = None, imageDir = None):
         """
@@ -1133,7 +1413,7 @@ class ImageDatastore:
         """
         Opens a dialog to select a folder and returns the selected path.
 
-        :returns: (str) The path to the selected folder.
+        :return: (str) The path to the selected folder.
         
         :raises RuntimeError: If folder selection fails.
         """
@@ -1148,6 +1428,11 @@ class ImageDatastore:
 
 # ------------- Image Loading and Metadata Parsing ------------- 
     def load_images(self, top_folder_only=False):
+        """
+        Loads paths to all image files in the specified image directory.
+
+        :param top_folder_only (bool): If True, only scans the top-level directory (no recursion).
+        """ 
         for root, _, files in os.walk(self.imageDir, topdown=True):
             for file in files:
                 if file.endswith(('.jpg', '.png', '.jpeg', '.tiff')):
@@ -1157,15 +1442,26 @@ class ImageDatastore:
                 break
 
     def initialize_image_handlers(self):
-        """Initialize ImageHandler instances for all stored images."""
+        """
+        Initializes an ImageHandler object for each loaded image path in self.images.
+
+        This method sets up the environment to process all stored images individually using ImageHandler methods.
+        """
         for image_path in self.images.keys():
             self.images[image_path] = ImageHandler(imagePath = image_path, configPath = self.config)
 
     def apply_to_all_images(self, func_name, *args, **kwargs):
-        """Apply a function from ImageHandler to all images."""
+        """
+        Applies a given method of ImageHandler to all loaded images.
+
+        :param func_name (str): The name of the method to call on each ImageHandler instance.
+        :param *args: Positional arguments passed to the target method.
+        :param **kwargs: Keyword arguments passed to the target method.
+        """
+
         for image_path, image_handler in self.images.items():
             if image_handler is None:
-                image_handler = ImageHandler(image_path, config = self.config)
+                image_handler = ImageHandler(imagePath = image_path, configPath = self.config)
                 self.images[image_path] = image_handler  # Store the instance
 
             if hasattr(image_handler, func_name):
@@ -1176,26 +1472,26 @@ class ImageDatastore:
 # ------------- Filtering options
     def filter_unmatched_images(self, matchDir):
         """
-        Removes images from the datastore that do not have a corresponding file in the matchfolder.
+        Removes images from the datastore that do not have a matching filename (by stem) in the provided directory.
 
-        :param matchDir: (str) Folder containing the corresponding files.
+        :param matchDir: (str)  Directory containing the files to match against.
         """
         tomatch_files = {Path(f).stem for f in os.listdir(matchDir)}
         self.images = {img: handler for img, handler in self.images.items() if Path(img).stem in tomatch_files}
 
     def get_unique_image_types(self):
         """
-        Retrieves all unique image types from the datastore.
+        Retrieves all unique image type suffixes from filenames in the datastore.
 
-        :return: (set) A set of unique image types.
+        :return: (set) Unique file type identifiers (e.g., {'timex', 'snap'}).
         """
         return {Path(img).stem.split('.')[-1] for img in self.images}
 
     def keep_images_by_type(self, image_types_to_keep):
         """
-        Keeps only images of a specified type in the datastore.
+        Keeps only images in the datastore whose filenames contain the specified type(s).
 
-        :param image_types_to_keep: (str) The type of images to keep (e.g., 'transect', 'bright').
+        :param image_types_to_keep (list or str): Image type(s) to retain (e.g., ['transect', 'bright']).
         """
         self.images = {
             img: handler for img, handler in self.images.items()
@@ -1204,9 +1500,10 @@ class ImageDatastore:
     
     def remove_images_by_type(self, image_types_to_remove):
         """
-        Removes images of specified types from the datastore.
+        Removes images from the datastore whose filenames contain the specified type(s).
 
-        :param image_types_to_remove: (list or str) The type(s) of images to remove (e.g., 'transect', 'bright').
+        :param image_types_to_remove (list or str): Image type(s) to remove (e.g., ['transect', 'bright']).
+
         """
         if isinstance(image_types_to_remove, str):  # If a single string is passed, convert it to a list
             image_types_to_remove = [image_types_to_remove]
@@ -1218,12 +1515,13 @@ class ImageDatastore:
 
     def get_image_metadata_by_type(self, image_types, site=None, camera=None):
         """
-        Retrieves metadata for images filtered by type, site, and camera.
+        Retrieves metadata for images filtered by type, site, and camera ID.
 
-        :param image_types: (list) List of image types (e.g., ['timex', 'snap']).
-        :param site: (str, optional) Site identifier to filter images.
-        :param camera: (str, optional) Camera identifier to filter images.
-        :return: (list) List of dictionaries containing image metadata.
+        :param image_types (list): List of target image types (e.g., ['timex', 'snap']).
+        :param site (str, optional): Site identifier to filter by.
+        :param camera (str, optional): Camera identifier to filter by.
+
+        :return: (list of dict) Each dictionary includes path, name, site, camera, type, and timestamp.
         """
         image_metadata = []
 
@@ -1248,9 +1546,7 @@ class ImageDatastore:
 
     def image_stats(self):
         """
-        Displays statistics about the images stored in the datastore.
-
-        :returns: None
+        Prints statistics about the images stored in the datastore including count and type breakdown.
         """
         total_images = len(self.images)
         type_counts = Counter(Path(img).stem.split('.')[-1] for img in self.images)
@@ -1261,21 +1557,14 @@ class ImageDatastore:
 
     def list_images(self):
         """
-        Lists images optionally filtered by site, camera, year, and month.
-
-        :param site: (str, optional) The site identifier to filter by.
-        :param camera: (str, optional) The camera identifier to filter by.
-        :param year: (str, optional) The year to filter by.
-        :param month: (str, optional) The month to filter by.
-        
-        :returns: (dict) A filtered list of images.
+        Prints the full paths of all images currently in the datastore.
         """
         filtered_images = self.images.keys()
         for img in filtered_images:
             print(img)
 
 # ------------- Products stuff
-    def merge_images(self):
+    def merge_images(self, make_plot=True, save_file=False):
         """
         Merges images from multiple rectified images generated on-the-fly.
 
@@ -1285,12 +1574,10 @@ class ImageDatastore:
         3. Merges the rectified images into a single composite.
         4. Saves and displays the merged rectified image.
 
-        Parameters:
-        - merged_rectifiedDir (str, optional): Directory to save output images.
-        - products (dict, optional): Dictionary containing lat/lon coordinates for overlay.
+        :param make_plot: (bool, optional) If True, generates and displays a plot of the merged rectified image. Default is True.
+        :param save_file: (bool, optional) If True, saves the merged rectified image as a NetCDF file. Default is False.
 
-        Returns:
-        - dict: A dictionary containing merged images and associated geographic data.
+        :returns: (dict) A dictionary containing merged images and associated geographic data. If no images are loaded, returns an empty dictionary.
         """
         
         if not self.images:
@@ -1299,6 +1586,7 @@ class ImageDatastore:
         
         merged_rectifiedDir = self.config.get("merged_rectifiedDir",os.path.join(os.getcwd(), 'merged_images'))
         os.makedirs(merged_rectifiedDir, exist_ok=True)
+        # Get products grid
         productsPath = self.config.get("productsPath", {})
         if productsPath:
             if not productsPath.endswith('.json'):
@@ -1317,6 +1605,8 @@ class ImageDatastore:
                 print(f"Warning: Could not load products file ({productsPath}): {e}")
                 products_grid = None
 
+        utmzone = int(products_grid['zone'])
+
         # Group images by removing the camera number (assume format includes `.cX.` where X is a digit)
         grouped_images = defaultdict(list)
         for img_path in self.images.keys():
@@ -1324,7 +1614,7 @@ class ImageDatastore:
             grouped_images[base_name].append(img_path)
 
         self.rectifications = {}
-
+        # For each image group (same site, image_type, time)
         for base_name, image_paths in grouped_images.items():
             print(f"Processing: {base_name} with {len(image_paths)} images")
             
@@ -1360,68 +1650,281 @@ class ImageDatastore:
 
             if images:
                 images = np.stack(images, axis=-1)  # Shape (x, y, 3, num_cameras)
+                # Merge rectified images
+                Ir = utils_CIRN.camera_seam_blend(images)  
+
+                # Save image to netcdf if save_flag on
+                if save_file:
+                    self.rectifications[base_name] = {
+                        "Ir": Ir,
+                        "Eastings": eastings,
+                        "Northings": northings,
+                        "localX": localX,
+                        "localY": localY
+                    }
+
+                    global_attrs = {
+                            "name": f"{base_name} merged image",
+                            "conventions": "CF-1.6",
+                            "institution": "U.S. Geological Survey",
+                            "source": "Mounted camera image capture",
+                        }
+                            
+                    
+                    dims = {"X_dim": Ir.shape[0],
+                            "Y_dim": Ir.shape[1],
+                            "Color_dim": Ir.shape[2]
+                    }
+                    
+                    products_attrs = {
+                            "crs_utm":{
+                                    "grid_mapping_name" : 'transverse_mercator',
+                                    "scale_factor_at_central_meridian" : 0.999600,
+                                    "longitude_of_central_meridian" : -177 + (utmzone - 1) * 6,
+                                    "latitude_of_projection_origin" : 0.000000,
+                                    "false_easting" : 500000.000000,
+                                    "false_northing" : 0.000000
+                                },
+                            "crs_latlon":{
+                                    "grid_mapping_name": 'latitude_longitude'
+                                },
+                            "Ir":{
+                                "long_name": 'rectified image pixel color value',
+                                "color_band":'RGB',
+                                "description":'Rectified image. Three dimensions: X, Y, color band, where the colors are RGB--R(ed) color band equals 0, G(reen) color band equals 1, and B(blue) color band equals 2.',
+                                "coordinates": 'X,Y', 
+                                "grid_mapping": 'crs_utm crs_wgs84 crs_local'
+                                },
+                            "localX":{
+                                "long_name": "Local cross-shore coordinates in meters of rectified image.",
+                                "min_value": np.around(np.array(localX).min(), decimals=3),
+                                "max_value": np.around(np.array(localX).min(), decimals=3),
+                                "units": "meters",
+                                "description":" Local cross-shore coordinates in meters of rectified image. Rotated based on shorenormal angle and origin. ",
+                                },
+                            "localY":{
+                                "long_name": "Local along-shore coordinates in meters of rectified image.",
+                                "min_value": np.around(np.array(localY).min(), decimals=3),
+                                "max_value": np.around(np.array(localY).min(), decimals=3),
+                                "units": "meters",
+                                "description":" Local along-shore coordinates in meters of rectified image. Rotated based on shorenormal angle and origin. ",
+                            },
+                            "Eastings":{
+                                "long_name" : f"Universal Transverse Mercator Zone {utmzone} Easting coordinate of rectified image",
+                                "units" : 'meters',
+                                "min_value" : np.around(np.array(eastings).min(), decimals=3),
+                                "max_value" : np.around(np.array(eastings).max(), decimals=3),
+                                "description" : f'Cross-shore coordinates of data in the rectified image projected onto the beach surface. Described using UTM Zone {utmzone} Easting in meters.',
+                            },
+                            "Northings":{
+                                "long_name" : f"Universal Transverse Mercator Zone {utmzone} Northing coordinate of rectified image",
+                                "units" : 'meters',
+                                "min_value" : np.around(np.array(northings).min(), decimals=3),
+                                "max_value" : np.around(np.array(northings).max(), decimals=3),
+                                "description" : f'Cross-shore coordinates of data in the rectified image projected onto the beach surface. Described using UTM Zone {utmzone} Northing in meters.',
+                            }
+                    }
+
+                    coords = {"X_dim": ("X_dim", np.arange(dims["X_dim"])),
+                            "Y_dim": ("Y_dim", np.arange(dims["Y_dim"])),
+                            "Color_dim": ("Color_dim", np.arange(dims["Color_dim"]))
+                    }
+
+                    data_vars = {"Ir": (["X_dim", "Y_dim", "Color_dim"], np.array(Ir), products_attrs["Ir"]),
+                                "localX_grid": (["X_dim", "Y_dim"], np.around(np.array(localX), decimals=3), products_attrs["localX"]),
+                                "localY_grid": (["X_dim", "Y_dim"], np.around(np.array(localY), decimals=3), products_attrs["localY"]),
+                                "eastings_grid": (["X_dim", "Y_dim"], np.around(np.array(eastings), decimals=3), products_attrs["Eastings"]),
+                                "northings_grid": (["X_dim", "Y_dim"], np.around(np.array(northings), decimals=3), products_attrs["Northings"]),
+                                "crs_utm": ([], 0, products_attrs["crs_utm"]),
+                                "crs_latlon": ([], 0, products_attrs["crs_latlon"])
+                    }
+        
+                    ds = xr.Dataset(
+                        data_vars = data_vars,
+                        coords = coords,
+                        attrs = global_attrs
+                    )
+                
+                    # Save to NetCDF
+                    saveDir = self.config.get("netcdfDir", os.path.join(os.getcwd(), 'netcdf'))
+                    os.makedirs(saveDir, exist_ok = True)
+                    saveName = os.path.join(saveDir, base_name + "_merged.nc")
+                    ds.to_netcdf(saveName)
+                    print(f"All data saved to {saveName}")
+
+                # Make plot if make_plot flag on and save image
+                if make_plot:
+                    
+                    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+                    fig.suptitle(f"Rectified Image - {base_name}", fontsize=14)
+
+                    # First subplot: pcolor
+                    ax1 = axes[0]
+                    pcolor_plot = ax1.pcolor(eastings, northings, Ir.squeeze(), shading='auto')
+                    if products_grid:
+                        easting, northing, _, _ = utm.from_latlon(products_grid['lat'], products_grid['lon'])
+                        ax1.scatter(easting, northing, c='r')
+                    ax1.set_xlabel("Eastings")
+                    ax1.set_ylabel("Northings")
+
+                    # Second subplot: imshow
+                    ax2 = axes[1]
+                    im = ax2.imshow(
+                        Ir.squeeze(),
+                        extent=[localX[0, 0], localX[-1, -1], localY[0, 0], localY[-1, -1]],
+                        origin='lower'
+                    )
+                    ax2.set_xlabel("Local X")
+                    ax2.set_ylabel("Local Y")
+
+                    plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust layout for title
+
+                    if merged_rectifiedDir:
+                        os.makedirs(merged_rectifiedDir, exist_ok=True)
+                        save_path = os.path.join(merged_rectifiedDir, f"{base_name}.merged_rectified.png")
+                        plt.savefig(save_path, dpi=300)
+                        print(f"Saved merged rectified image to {save_path}")
+
+                    plt.show()
+
+    def merge_images_fast(self):
+        """
+        Merges images from multiple rectified images generated on-the-fly (optimized version).
+
+        Steps:
+        1. Groups images from self.images that belong to the same scene (ignoring camera number).
+        2. Runs `rectify_image` on each matching image.
+        3. Merges the rectified images into a single composite.
+        4. Saves the merged rectified image and deletes rectified and merged images.
+
+        :param merged_rectifiedDir: (str, optional) Directory to save output images. Default is the 'merged_images' folder in the current working directory.
+        :param products: (dict, optional) Dictionary containing lat/lon coordinates for overlay. Default is None.
+
+        :returns: (dict) A dictionary containing merged images and associated geographic data. If no images are loaded, returns an empty dictionary.
+        """
+        if not self.images:
+            print("No images loaded in datastore.")
+            return {}
+        
+        merged_rectifiedDir = self.config.get("merged_rectifiedDir",os.path.join(os.getcwd(), 'merged_images'))
+        os.makedirs(merged_rectifiedDir, exist_ok=True)
+        # Get products_grid
+        productsPath = self.config.get("productsPath", {})
+        if productsPath:
+            if not productsPath.endswith('.json'):
+                productsPath = os.path.join(productsPath, "products.json")  # Append 'products.json' if it's a directory
+            try:
+                with open(productsPath, "r") as file:
+                    products = json.load(file)
+                if isinstance(products, list):
+                    products_grid = next((item for item in products if item.get("type") == "Grid"), None)
+                # If products is already a dictionary, assume it's the desired item
+                elif isinstance(products, dict) and products.get("type") == "Grid":
+                    products_grid = products
+                else:
+                    products_grid = None  # If neither, return None
+            except (FileNotFoundError, json.JSONDecodeError) as e:
+                print(f"Warning: Could not load products file ({productsPath}): {e}")
+                products_grid = None
+
+        utmzone = int(products_grid['zone'])
+
+        # Group images by removing the camera number (assume format includes `.cX.` where X is a digit)
+        grouped_images = defaultdict(list)
+        for img_path in self.images.keys():
+            base_name = re.sub(r"\.c\d+", "", Path(img_path).stem)  # Remove ".cX" to group by scene
+            grouped_images[base_name].append(img_path)
+
+        self.rectifications = {}
+        # For each image group (same site, image_type, time)
+        for base_name, image_paths in grouped_images.items():
+            print(f"Processing: {base_name} with {len(image_paths)} images")
+            
+            images = []
+            eastings, northings, localX, localY = None, None, None, None  # Initialize once
+
+            for img_path in image_paths:
+                # Ensure we are using an ImageHandler instance
+                self.images[img_path] = ImageHandler(imagePath = img_path, configPath = self.config)
+                
+                # Rectify image
+                img_handler = self.images[img_path] 
+                img_handler.rectify_image()
+                data = img_handler.processing_results["rectified_image"]
+                
+                I = np.array(data.get("Ir"))
+                I = np.expand_dims(I, axis=-1) if I.ndim == 2 else I  # Ensure shape (x, y, 1)
+                
+                eastings = np.array(data.get("Eastings", eastings))
+                northings = np.array(data.get("Northings", northings))
+                localX = np.array(data.get("localX", localX))
+                localY = np.array(data.get("localY", localY))
+
+                # store rectified images
+                images.append(I)
+                timestamp = img_handler.datetime.strftime("%Y-%m-%d %H:%M:%S")
+                text = f"Site: {img_handler.site} | {img_handler.image_type}"
+
+                # Delete image instance to save storage capacity
+                del self.images[img_path]
+
+            if images:
+                images = np.stack(images, axis=-1)  # Shape (x, y, 3, num_cameras)
                 Ir = utils_CIRN.camera_seam_blend(images)  # Merge rectified images
 
-                self.rectifications[base_name] = {
-                    "Ir": Ir,
-                    "Eastings": eastings,
-                    "Northings": northings,
-                    "localX": localX,
-                    "localY": localY
-                }
+                
+                #fig1, ax1 = plt.subplots(figsize=(4, 6))
+                #id = 1000
+                #fig1.patch.set_facecolor('black')
+                #ax1.set_facecolor('black')
+                #ax1.pcolor(eastings[id:,:], northings[id:,:], Ir[id:,:,:].squeeze(), shading='auto')
 
-                # Create visualization
-                fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-                fig.suptitle(f"Rectified Image - {base_name}", fontsize=14)
+                #ax1.text(0.78, 0.8, text, ha='right', va='top', fontsize=10, color='black', transform=fig1.transFigure)
+                #ax1.text(0.78, 0.77, timestamp, ha='right', va='top', fontsize=10, color='black', transform=fig1.transFigure)
+                #ax1.axis('off')
+                #os.makedirs(merged_rectifiedDir, exist_ok=True)
+                #utm_save_path = os.path.join(merged_rectifiedDir, f"{base_name}.utm.png")
+                #fig1.savefig(utm_save_path, dpi=300, bbox_inches='tight', pad_inches=0)
+                #print(f"Saved UTM image to {utm_save_path}")
+                #plt.close(fig1)
 
-                # First subplot: pcolor
-                ax1 = axes[0]
-                pcolor_plot = ax1.pcolor(eastings, northings, Ir.squeeze(), shading='auto')
-                if products_grid:
-                    easting, northing, _, _ = utm.from_latlon(products_grid['lat'], products_grid['lon'])
-                    ax1.scatter(easting, northing, c='r')
-                ax1.set_xlabel("Eastings")
-                ax1.set_ylabel("Northings")
+                # ---------- PLOT 2: Local Coordinates Only ----------
+                fig1, ax1 = plt.subplots(figsize=(4, 6))
+                id = 750
+                fig1.patch.set_facecolor('black')
+                ax1.set_facecolor('black')
+                ax1.imshow(Ir[id:,:,:].squeeze(),extent=[localX[id, 0], localX[-1, -1], localY[id, 0], localY[-1, -1]],origin='lower')
 
-                # Second subplot: imshow
-                ax2 = axes[1]
-                im = ax2.imshow(
-                    Ir.squeeze(),
-                    extent=[localX[0, 0], localX[-1, -1], localY[0, 0], localY[-1, -1]],
-                    origin='lower'
-                )
-                ax2.set_xlabel("Local X")
-                ax2.set_ylabel("Local Y")
-
-                plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust layout for title
-
+                ax1.text(0.88, 0.77, text, ha='right', va='top', fontsize=10, color='black', transform=fig1.transFigure)
+                ax1.text(0.88, 0.74, timestamp, ha='right', va='top', fontsize=10, color='black', transform=fig1.transFigure)
+                ax1.axis('off')
+                # Save Local plot
                 if merged_rectifiedDir:
-                    os.makedirs(merged_rectifiedDir, exist_ok=True)
-                    save_path = os.path.join(merged_rectifiedDir, f"{base_name}.merged_rectified.png")
-                    plt.savefig(save_path, dpi=300)
-                    print(f"Saved merged rectified image to {save_path}")
+                    local_save_path = os.path.join(merged_rectifiedDir, f"{base_name}.local.png")
+                    fig1.savefig(local_save_path, dpi=300, bbox_inches='tight', pad_inches=0)
+                    print(f"Saved Local image to {local_save_path}")
 
-                plt.show()
+                plt.close(fig1)
 
     def create_video(self, image_type = 'timex', frame_rate = 24, video_name = None, videoDir = os.getcwd(), camera = None, site = None, start_time = None, end_time = None):
         """
         Create a video from images in the datastore with optional filtering by image type, camera, and site.
 
-        :param frame_rate: (int, optional) Frame rate for the video (fps).
-        :param image_type: (str, optional) Type of images to include (e.g., 'bright', 'snap').
-        :param video_name: (str, optional) Output video file name.
-        :param videoDir: (str, optional) Output video location.
-        :param camera: (str, optional) Camera identifier to filter by.
-        :param site: (str, optional) Site identifier to filter by.
-        :param start_time (datetime, optional) Start time for videos - will find closest image
-        :param end_time (datetime, optional) End time for videos - will find closest image
+        :param image_type: (str, optional) Type of images to include (e.g., 'bright', 'snap'). Default is 'timex'.
+        :param frame_rate: (int, optional) Frame rate for the video (fps). Default is 24.
+        :param video_name: (str, optional) Output video file name. If None, a default name will be generated.
+        :param videoDir: (str, optional) Output video location. Default is the current working directory.
+        :param camera: (str, optional) Camera identifier to filter by. Default is None (no filter).
+        :param site: (str, optional) Site identifier to filter by. Default is None (no filter).
+        :param start_time: (datetime, optional) Start time for videos - will find the closest image. Default is None.
+        :param end_time: (datetime, optional) End time for videos - will find the closest image. Default is None.
+
         """
         for img_path in self.images.keys():
             if isinstance(self.images, list) or not self.images[img_path]:
                 self.initialize_image_handlers()
             continue
         images_metadata = self.get_image_metadata_by_type([image_type], site=site, camera=camera)
-        print(images_metadata)
         if not images_metadata:
             print(f"No images found for type '{image_type}' with specified filters.")
             return
@@ -1437,6 +1940,7 @@ class ImageDatastore:
         if not images_metadata:
             print(f"No images found in the specified time range.")
             return
+        
         # Read the first image to get dimensions
         first_image = cv2.imread(images_metadata[0]["path"])
         height, width, layers = first_image.shape
@@ -1455,8 +1959,7 @@ class ImageDatastore:
         out = cv2.VideoWriter(video_path, fourcc, frame_rate, (width, height))
 
         # Process each image
-        for img_metadata in images_metadata:
-            print(img_metadata['path'])
+        for img_metadata in tqdm(images_metadata, desc="Processing images", unit="image"):
             image = cv2.imread(img_metadata["path"])
             try:
                 timestamp = img_metadata["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
@@ -1475,17 +1978,26 @@ class ImageDatastore:
         out.release()
         print(f"Video created successfully: {video_name}")
 
-    def process_image_pairs(self, make_plots=False, save_flag = True):
+    def process_shorelines(self, make_plots=False, save_flag = True, dem = None):
         """
-        Identifies and processes pairs of 'bright' and 'timex' images.
-        If both exist, it processes the 'bright' image first and passes the results to 'timex'.
+        Identifies and processes pairs of 'bright' and 'timex' images. If both images exist for a given base name, 
+        the 'bright' image is processed first, and the results are passed to the 'timex' image for further processing. 
+        Optionally, plots can be generated, and results can be saved to NetCDF files.
+
+        :param make_plots (bool, optional): If True, generates plots for the processing results. Default is False.
+        :param save_flag (bool, optional): If True, saves the processed images to NetCDF files. Default is True.
+        :param dem (rioxarray.DataArray, optional): A pre-loaded Digital Elevation Model (DEM) to be used for shoreline rectification. If None, the DEM is loaded from the config file.
+
         """
+        # Only keep and initialize bright and timex images
         for img_path in self.images.keys():
             if any(img_type in Path(img_path).stem for img_type in ['bright', 'timex']) and not self.images[img_path]:
                 self.images[img_path] = ImageHandler(imagePath = img_path, configPath = self.config)
 
         image_groups = {}
-        
+        # Load DEM
+        dem = dem if dem is not None else rioxarray.open_rasterio(self.config.get("demPath"), masked=True)
+                
         # Group images by their base name (excluding image type)
         for image_path, handler in self.images.items():
             if handler and handler.image_type in ['bright', 'timex']:
@@ -1494,7 +2006,7 @@ class ImageDatastore:
                     image_groups[base_name] = {}
                 image_groups[base_name][handler.image_type] = handler
         
-        # Process pairs of images
+        # Process pairs of images - get shoreline, project onto DEM, and save to netcdf
         for base_name, images in image_groups.items():
             bright_handler = images.get('bright')
             timex_handler = images.get('timex')
@@ -1504,25 +2016,36 @@ class ImageDatastore:
             if bright_handler:
                 bright_handler.process_bright(make_plots=make_plots)
                 bright_results = bright_handler.processing_results.get('shoreline', {})
-                bright_handler.rectify_shoreline()
+                bright_handler.rectify_shoreline(dem = dem)
                 if save_flag:
                     bright_handler.save_to_netcdf()
             
             if timex_handler:
                 timex_handler.process_timex(bright_coords=bright_results, make_plots=make_plots)
-                timex_handler.rectify_shoreline()
+                timex_handler.rectify_shoreline(dem = dem)
                 if save_flag:
                     timex_handler.save_to_netcdf()
 
 # ------------- timestack stuff
-    def get_runup_from_timestacks(self, segformer_flag = True, save_flag = True):
+    def get_runup_from_timestacks(self, segformer_flag = True, save_flag = True, dem = None):
+        """
+        Processes 'transect' images to extract runup data from timestacks using SegFormer. 
+        The method optionally runs SegFormer on the images to extract runup data and saves the results to NetCDF files.
 
+        :param segformer_flag (bool, optional): If True, runs SegFormer on the timestacks to extract runup data. Default is True.
+        :param save_flag (bool, optional): If True, saves the processed runup data to NetCDF files. Default is True.
+        :param dem (rioxarray.DataArray, optional): A pre-loaded Digital Elevation Model (DEM) to be used for runup computation. If None, the DEM is loaded from the config file.
+        """
+        # Only initialize trasnects
         for img_path in self.images.keys():
             if 'transect' in Path(img_path).stem and not self.images[img_path]:
                 self.images[img_path] = ImageHandler(imagePath = img_path, configPath = self.config)
                 
         transect_images = {img_path: handler for img_path, handler in self.images.items() if 'transect' in handler.image_name}
 
+        # Get DEM
+        dem = dem if dem is not None else rioxarray.open_rasterio(self.config.get("demPath"), masked=True)
+        
         self.runup = {}
 
         for img_path, img_handler in transect_images.items():
@@ -1530,12 +2053,17 @@ class ImageDatastore:
             
             # Run the segformer on the timestack and get the runup from segformer
             if segformer_flag is True:
-                print('Running Segformer')
                 img_handler.run_segformer_on_timestack()
             print('Extracting runup')
-            img_handler.get_runup_from_segformer()
-            #img_handler.compute_runup()
-            if save_flag is True:
-                img_handler.save_to_netcdf()
+            try:
+                # Extract runup from segformer .npz
+                img_handler.get_runup_from_segformer()
+                # Get vertical runup and runup stats
+                img_handler.compute_runup(dem = dem)
+                # Save to netcdf
+                if save_flag is True:
+                    img_handler.save_to_netcdf()
+            except:
+                print(f'Issues getting runup from {img_handler.image_name}. Check if segformer needs to be run, if there was no runup found, or the DEM is bad.')
 
 

@@ -1,33 +1,23 @@
 """
 utils_shoreline.py
 
-This module provides functions shoreline detection from ARGUS-style image products.
-
-Dependencies:
-    - os
-    - cv2
-    - torch
-    - random
-    - numpy
-    - pathlib
-    - scipy
-    - matplotlib
-    - segment_anything
+This module provides functions to extract shorelines from ARGUS-style image products.
 
 """
 import os
-import cv2
-import torch
 import random
+from pathlib import Path
+
+import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
-from pathlib import Path
+import torch
 from scipy import interpolate
-import matplotlib.pyplot as plt
+
 from segment_anything import SamPredictor, sam_model_registry
 
 # Function to extract random coords from the largest connected component (surfzone point)
-
 def find_surfzone_coords(image_path, num_points = 5, step = 200, max_attempts = 100, make_plot = False):
     """
     Extract up to `num_points` random points from the largest connected component in the image

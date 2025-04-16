@@ -1,24 +1,17 @@
 """
 utils_exif.py
 
-This module provides functions for embedding relevant metadata into images, particularly for
-handling camera calibration parameters and extracting metadata from YAML and JSON files.
-
-Dependencies:
-    - os
-    - json
-    - glob
-    - yaml
-    - datetime
-    - pathlib
+This module provides functions for embedding relevant metadata into images, particularly for handling camera calibration parameters and extracting metadata from YAML and JSON files.
 
 """
-import os
-import json
+
 import glob
-import yaml
+import json
+import os
 from datetime import datetime
 from pathlib import Path
+
+import yaml
 
 def loadMultiCamJson(site, camNum, jsonDir, year = None):
     """
@@ -29,8 +22,7 @@ def loadMultiCamJson(site, camNum, jsonDir, year = None):
     :param jsonDir: (str) Directory containing JSON metadata files.
     :param year: (int, optional) Year to specify a JSON file. Defaults to None.
     
-    
-    :return dict: JSON metadata tags.
+    :return (dict): JSON metadata tags.
     """
     json_file = f"{jsonDir}/{site}EXIF_c{camNum}_{year}.json" if year else f"{jsonDir}/{site}EXIF_c{camNum}.json"
     with open(json_file) as f:
@@ -40,11 +32,7 @@ def loadMultiCamJson(site, camNum, jsonDir, year = None):
 
 def createCalibDict(site, yamlDir, fileDatetime=None, camNum=None, transect=None):
     """
-    Create the dictionary object containing the camera calibration parameters
-    (extrinsics, intrinsics, local origin, metadata) for a given site. Read in data
-    from YAML files. If necessary, for sites like Madeira Beach, also specify a datetime
-    to select the appropriate extrinsic calibration and metadata YAML files. Each dictionary
-    also contains descriptions of what each variable is as well as a note describing the dictionary.
+    Create the dictionary object containing the camera calibration parameters (extrinsics, intrinsics, local origin, metadata) for a given site. Read in data from YAML files. Each dictionary also contains descriptions of what each variable is as well as a note describing the dictionary.
     
     :param site: (str) site name
     :param yamlDir: (str) directory containing YAML calibration files.
@@ -53,7 +41,7 @@ def createCalibDict(site, yamlDir, fileDatetime=None, camNum=None, transect=None
     :param camNum: (int, optional) camera number to use when searching for YAML file
     :param transect: (int, optional) transect to use when searching for YAML file
     
-    :return calibDict: (dict) dictionary object of variables and their descriptors
+    :return: calibDict (dict) dictionary object of variables and their descriptors
     """
 
     calibDict = {
@@ -222,7 +210,8 @@ def uniqueYamlDates(yamlList):
     return yamlDateList
 
 def yaml2dict(yamlfile):
-    """ Load a YAML file into a dictionary.
+    """ 
+    Load a YAML file into a dictionary.
     
     :param yamlfile: (str) YAML file to read
     

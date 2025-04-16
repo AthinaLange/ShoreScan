@@ -1,28 +1,21 @@
-# Functions for analyzing Runup SegFormer results
 """
 utils_segformer.py
 
 This module provides functions for extracting wave runup from the softmax image given by the SegFormer Runup algorithm.
 
-Dependencies:
-    - os
-    - re
-    - cv2
-    - numpy
-    - datetime
-    - scipy
-
 """
 import os
 import re
+from datetime import datetime, timezone
+
 import cv2
 import numpy as np
-from datetime import datetime, timezone
 import scipy.signal
 import scipy.interpolate
 
 def get_SegGym_runup_pixel_timeseries(softmax, rundown_val, runup_val, buffer):
-    """Computes the average softmax value of pixels in the runup phase, weighted by their distance to the rundown phase.
+    """
+    Computes the average softmax value of pixels in the runup phase, weighted by their distance to the rundown phase.
 
     :param softmax: (npz data) A softmax image, where pixel values represent the probability of belonging to the foreground class.
     :param rundown_val: (float) A threshold value below which pixels are considered to be in the rundown phase.

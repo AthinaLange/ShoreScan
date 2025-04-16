@@ -1,22 +1,24 @@
-## Functions needed to rectify images - based on CIRN QCIT
-import os
+"""
+utils_CIRN.py
+
+This module provides functions for rectifing imagery - based on CIRN QCIT toolbox
+
+"""
 import json
-import glob
-import re
 import math
+import os
+from tkinter import Tk, filedialog, messagebox
+
 import cv2
 import numpy as np
-import utm
 import scipy.ndimage
-import matplotlib.pyplot as plt
-from pathlib import Path
-from tkinter import Tk, filedialog
+from scipy import interpolate
+import utm
 
-## ------------------- Runup stuff -------------------
+
 def CIRNangles2R(azimuth, tilt, roll):
     """
-    Computes a 3x3 rotation matrix R to transform world coordinates 
-    to camera coordinates using a ZXZ rotation sequence.
+    Computes a 3x3 rotation matrix R to transform world coordinates to camera coordinates using a ZXZ rotation sequence.
 
     :param azimuth: (float) Horizontal rotation (radians), positive CW from world Z-axis.
     :param tilt: (float) Up/down tilt (radians), 0 is nadir, +90 is horizon.
@@ -106,21 +108,15 @@ def distortUV(U, V, intrinsics):
     """
     Distorts undistorted UV coordinates using the distortion model.
     
-    Parameters:
-    U : ndarray
-        Px1 array of undistorted U coordinates.
-    V : ndarray
-        Px1 array of undistorted V coordinates.
-    intrinsics : dict
-        Dictionary of intrinsic camera parameters.
-    
-    Returns:
-    Ud : ndarray
-        Px1 array of distorted U coordinates.
-    Vd : ndarray
-        Px1 array of distorted V coordinates.
-    flag : ndarray
-        Px1 array indicating if the UVd coordinate is valid (1) or not (0).
+    :param U (ndarray): Px1 array of undistorted U coordinates.
+    :param V (ndarray): Px1 array of undistorted V coordinates.
+    :param intrinsics (dict): Dictionary containing the intrinsic camera parameters, including focal length, 
+        principal point, and distortion coefficients.
+
+    :return: tuple
+        - Ud (ndarray): Px1 array of distorted U coordinates.
+        - Vd (ndarray): Px1 array of distorted V coordinates.
+        - flag (ndarray): Px1 array indicating if the UVd coordinate is valid (1) or not (0).
     """
     
     fx, fy, c0U, c0V = intrinsics['fx'], intrinsics['fy'], intrinsics['coU'], intrinsics['coV']
@@ -183,8 +179,7 @@ def intrinsicsExtrinsics2P(intrinsics, extrinsics):
 
 def uv_to_xyz(intrinsics, extrinsics, Ud, Vd, known_dim, known_val):
     """
-    Converts image coordinates (U, V) to world coordinates (X, Y, Z) 
-    using camera intrinsics, extrinsics, and the Direct Linear Transformation (DLT) equations.
+    Converts image coordinates (U, V) to world coordinates (X, Y, Z) using camera intrinsics, extrinsics, and the Direct Linear Transformation (DLT) equations.
 
     :param intrinsics: (dict) Dictionary of intrinsic camera parameters.
     :param extrinsics: (dict) Dictionary of extrinsic parameters [x, y, z, azimuth, tilt, roll].
@@ -232,15 +227,18 @@ def uv_to_xyz(intrinsics, extrinsics, Ud, Vd, known_dim, known_val):
         raise ValueError("known_dim must be 'x', 'y', or 'z'")
 
     # Ensure consistent output format
-    xyz = np.column_stack((np.atleast_1d(X), np.atleast_1d(Y), np.atleast_1d(Z)))
+    max_size = max(map(np.size,[X,Y,Z]))
+    X = np.full(max_size, X) if np.size(X) == 1 else X
+    Y = np.full(max_size, Y) if np.size(Y) == 1 else Y
+    Z = np.full(max_size, Z) if np.size(Z) == 1 else Z
+   
+    xyz = np.column_stack((X.ravel(), Y.ravel(), Z.ravel()))
 
     return xyz
 
-
-def dist_uv_to_xyz(intrinsics, extrinsics, Ud, Vd, known_dim, known_val):
+def dist_uv_to_xyz(intrinsics, extrinsics, Ud, Vd, known_dim, known_val, timeout = 60):
     """
-    Converts image coordinates (U, V) to world coordinates (X, Y, Z) 
-    using camera intrinsics, extrinsics, and the Direct Linear Transformation (DLT) equations.
+    Converts image coordinates (U, V) to world coordinates (X, Y, Z) using camera intrinsics, extrinsics, and the Direct Linear Transformation (DLT) equations.
 
     :param intrinsics: (dict) Dictionary of intrinsic camera parameters.
     :param extrinsics: (dict) Dictionary of extrinsic parameters [x, y, z, azimuth, tilt, roll].
@@ -282,8 +280,13 @@ def dist_uv_to_xyz(intrinsics, extrinsics, Ud, Vd, known_dim, known_val):
     else:
         raise ValueError("known_dim must be 'x', 'y', or 'z'")
 
+    max_size = max(map(np.size,[X,Y,Z]))
+    X = np.full(max_size, X) if np.size(X) == 1 else X
+    Y = np.full(max_size, Y) if np.size(Y) == 1 else Y
+    Z = np.full(max_size, Z) if np.size(Z) == 1 else Z
+   
     # Ensure consistent output format
-    xyz = np.column_stack((np.atleast_1d(X), np.atleast_1d(Y), np.atleast_1d(Z)))
+    xyz = np.column_stack((X.ravel(),Y.ravel(), Z.ravel()))
 
     return xyz
 
@@ -327,12 +330,6 @@ def get_site_settings(file_path = None):
         "SITE_ID": {  // Each site (e.g., "CACO03", "SITEB") is a key containing site-specific information
             "siteName": "Full site name",  // Descriptive name of the site
             "shortName": "Short identifier",  // Abbreviated site name
-            "directories": {  // File path locations for different types of data
-                "timestackDir": "Path to JPG image files",
-                "netcdfDir": "Path to NetCDF files",
-                "runupDir": "Path to runup analysis data",
-                "topoDir": "Path to topographic data"
-            },
             "siteInfo": {  // Metadata related to the site
                 "siteLocation": "Geographical location of the site",
                 "dataOrigin": "Organization responsible for the data",
@@ -401,18 +398,17 @@ def get_pixels(output_grid, UV_coords, I):
     """
     Computes pixel coordinates (UV) from world coordinates (XYZ) and extracts pixel values from an image.
 
-    Parameters:
-    - products (dict): Dictionary containing transect data.
-    - extrinsics (dict): Camera extrinsic parameters.
-    - intrinsics (dict): Camera intrinsic parameters.
-    - I (numpy.ndarray): Image matrix.
+    :param products (dict): Dictionary containing transect data.
+    :param extrinsics (dict): Camera extrinsic parameters.
+    :param intrinsics (dict): Camera intrinsic parameters.
+    :param I (numpy.ndarray): Image matrix representing the image data to be processed.
 
-    Returns:
-    - dict: A dictionary containing processed pixel data for each transect, including:
-        - "Ir": Rectified image values.
-        - "localX", "localY": Local coordinates.
-        - "Z": Elevation values.
-        - "Eastings", "Northings": UTM coordinates.
+    :return: dict
+        - A dictionary containing processed pixel data for each transect, including:
+            - "Ir" (ndarray): Rectified image values.
+            - "localX" (ndarray), "localY" (ndarray): Local coordinates.
+            - "Z" (ndarray): Elevation values.
+            - "Eastings" (ndarray), "Northings" (ndarray): UTM coordinates.
     """
     
     for key, data in output_grid.items():
@@ -446,7 +442,32 @@ def get_pixels(output_grid, UV_coords, I):
     return output_grid
 
 def get_xy_coords(products):
+    """
+    Computes XY coordinates and other associated data based on the provided products dictionary.
 
+    :param products (dict): Dictionary containing the following fields:
+        - 'lat' (list or ndarray): Latitude values.
+        - 'lon' (list or ndarray): Longitude values.
+        - 'angle' (float): Rotation angle in degrees.
+        - 'tide' (float or ndarray): Tide values.
+        - 'xlim' (list or tuple): Limits for the X coordinates (min, max).
+        - 'ylim' (list or tuple): Limits for the Y coordinates (min, max).
+        - 'type' (str): The type of transect data, such as 'Grid', 'xTransect', or 'yTransect'.
+        - 'x' (ndarray): X coordinates for transect data.
+        - 'y' (ndarray): Y coordinates for transect data.
+        - Optional: 'east' (ndarray), 'north' (ndarray), 'z' (list or ndarray), 'lim_flag' (int).
+        
+    :return: dict
+        - A dictionary containing the processed XY and associated data:
+            - 'xyz' (ndarray): Combined XY and Z coordinates.
+            - 'localX' (ndarray): Local X coordinates.
+            - 'localY' (ndarray): Local Y coordinates.
+            - 'Elevation' (ndarray): Elevation values.
+            - 'Eastings' (ndarray): UTM Easting coordinates.
+            - 'Northings' (ndarray): UTM Northing coordinates.
+            - 'local_grid_origin' (ndarray): Origin of the local grid (Easting, Northing).
+            - 'local_grid_angle' (float): Rotation angle for the local grid.
+    """
     assert isinstance(products, dict), "Error: Products must be a dictionary."
     required_fields = ['lat', 'lon', 'angle', 'tide', 'xlim', 'ylim', 'type', 'x', 'y']
     for field in required_fields:
@@ -518,9 +539,11 @@ def get_xy_coords(products):
             'xyz': xyz,
             'localX': localX,
             'localY': localY,
-            'Z': Z,
+            'Elevation': Z,
             'Eastings': Eastings,
-            'Northings': Northings
+            'Northings': Northings,
+            'local_grid_origin': np.array([easting, northing]),
+            'local_grid_angle': products["angle"]
         }
     
     return output
@@ -528,6 +551,22 @@ def get_xy_coords(products):
 def get_uv_coords(output_grid, intrinsics, extrinsics):
     """
     Computes UV coordinates from XYZ coordinates and returns them for reuse.
+
+    :param output_grid (dict): Dictionary containing processed XYZ data for each transect.
+        - Each entry in the dictionary has the following fields:
+            - 'xyz' (ndarray): Combined XYZ coordinates.
+            - 'localX' (ndarray): Local X coordinates.
+            - 'localY' (ndarray): Local Y coordinates.
+    :param intrinsics (dict): Camera intrinsic parameters containing:
+        - 'NU' (int): Number of columns in the image.
+        - 'NV' (int): Number of rows in the image.
+    :param extrinsics (dict): Camera extrinsic parameters.
+
+    :return: dict
+        - A dictionary containing UV coordinates for each transect:
+            - Each entry corresponds to a key from `output_grid` and contains:
+                - Ud (ndarray): Distorted U coordinates.
+                - Vd (ndarray): Distorted V coordinates.
     """
     UV_coords = {}
     
@@ -558,6 +597,131 @@ def get_uv_coords(output_grid, intrinsics, extrinsics):
         UV_coords[key] = (Ud, Vd)
     
     return UV_coords
+
+def get_interp_dem(dem):
+    """
+    Generates an interpolation function from a given Digital Elevation Model (DEM).
+    
+    :param dem: (xarray.DataArray) The DEM containing x, y, and elevation values.
+    
+    :returns (function) A RegularGridInterpolator function for elevation lookup.
+    """
+    x = dem['x'].values
+    y = np.flipud(dem['y'].values)
+    z = np.flipud(np.squeeze(dem.values))
+
+    # Create interpolation function
+    interp_func = interpolate.RegularGridInterpolator(
+        (x,y), z.T, bounds_error=False, fill_value=np.nan
+    )
+    return interp_func
+
+def get_elevation_from_dem(interp_func, transect_data, camera_origin, initial_step_size = -1, max_steps = 250, max_error = 0.1, min_depth = -2):
+    """
+    Computes terrain intersection points using ray marching from a given camera origin.
+    
+    :param interp_func: (function) Interpolation function for terrain height lookup.
+    :param transect_data: (dict) Dictionary containing xyz coordinate data.
+    :param camera_origin: (np.array) The camera's origin point in 3D space.
+    :param initial_step_size: (float) Initial step size for ray marching.
+    :param max_steps: (int) Maximum number of steps before termination.
+    :param min_error: (float) Minimum acceptable error for terrain intersection.
+    :param min_depth: (float) Minimum depth allowed before terminating search.
+    
+    :returns: (tuple) Updated xyz points and a list of ray paths.
+    """
+    xyz_points = np.full_like(transect_data['xyz'], np.nan)
+    xyz_ray=[]
+
+    for i, point in enumerate(transect_data['xyz']):
+        direction = point - camera_origin  # Vector from camera to point
+        direction = direction / direction[-1]  # Normalize to unit scale
+        step_size = -np.abs(initial_step_size)  # Ensure movement is downward
+
+        # Generate ray points for visualization
+        ray_points = np.array([np.outer(np.linspace(0, -camera_origin[2], 100), direction) + camera_origin])
+        xyz_ray.append(ray_points.squeeze())
+        
+        # Perform ray marching to find terrain intersection
+        pos = camera_origin.astype('float64').copy()
+        for _ in range(max_steps):
+            prev_pos = pos.copy()
+            pos += step_size * direction.astype('float64')
+            try:
+                terrain_height = interp_func((pos[0], pos[1]))
+                error = np.abs(pos[2] - terrain_height)
+                if pos[2] <= terrain_height:
+                    if error < max_error:  # Terrain hit condition
+                        break
+                    else:
+                        step_size *= 0.5  # Reduce step size for accuracy
+                        pos = prev_pos  # Revert to last position
+                elif pos[2] <= min_depth:
+                    pos = np.array([np.nan, np.nan, np.nan])  # Mark as invalid point
+                    break
+            except ValueError:
+                break  # Stop if out of bounds
+        xyz_points[i, :] = pos
+
+    return xyz_points, xyz_ray
+        
+def get_elevations(dem, extrinsics, coords, max_error = 0.1):
+    """
+    Computes elevations for a set of coordinates using ray-marching and a DEM.
+    
+    Parameters:
+        dem (xarray.DataArray): The Digital Elevation Model.
+        extrinsics (dict): Dictionary containing camera extrinsic parameters (x, y, z).
+        coords (dict): Dictionary containing xyz coordinates for elevation retrieval.
+    
+    Returns:
+        tuple: Updated coordinate dictionary with elevation values and ray paths.
+    """
+    interp_func = get_interp_dem(dem)
+    camera_origin = np.array([extrinsics['x'], extrinsics['y'], extrinsics['z']])
+    
+    if isinstance(coords, dict) and all(isinstance(v,dict) for v in coords.values()):
+        for transect_key in coords:
+            transect_data = coords[transect_key]
+            if np.max(np.shape(transect_data['xyz'])) > 10000:
+                root = Tk()
+                root.withdraw()  
+                response = messagebox.askyesno("Confirmation", "Your file is very big. Are you sure you want to continue?")
+                root.destroy()
+                if not response:
+                    xyz_ray = []
+                    continue
+            xyz_points, xyz_ray = get_elevation_from_dem(interp_func, transect_data, camera_origin, min_depth = np.nanmin(np.squeeze(dem.values)), max_error=max_error)
+            
+            # Replace non-NaN values in coords['Eastings'] with values from xyz_points[:, 0]
+            mask = ~np.isnan(xyz_points)  # Create a boolean mask for non-NaN values
+            # Apply the mask to each column of the xyz array
+            coords[transect_key]['xyz'][mask] = xyz_points[mask]
+            coords[transect_key]['Eastings'] = coords[transect_key]['xyz'][:, 0]
+            coords[transect_key]['Northings'] = coords[transect_key]['xyz'][:, 1]
+            coords[transect_key]['Elevation'] = coords[transect_key]['xyz'][:, 2]
+            coords[transect_key]['localX'], coords[transect_key]['localY'] = local_transform_points(coords[transect_key]['local_grid_origin'][0], coords[transect_key]['local_grid_origin'][1], np.radians(coords[transect_key]['local_grid_angle']), 1, coords[transect_key]['xyz'][:, 0], coords[transect_key]['xyz'][:, 1])
+            
+    else:
+        if np.max(np.shape(coords['xyz'])) > 10000:
+            root = Tk()
+            root.withdraw()  
+            response = messagebox.askyesno("Confirmation", "Your file is very big. Are you sure you want to continue?")
+            root.destroy()
+            if not response:
+                xyz_ray = []
+                raise Exception("Process stopped by user")
+        xyz_points, xyz_ray = get_elevation_from_dem(interp_func, coords, camera_origin, min_depth = np.nanmin(np.squeeze(dem.values)), max_error=max_error)
+        # Replace non-NaN values in coords['Eastings'] with values from xyz_points[:, 0]
+        mask = ~np.isnan(xyz_points)  # Create a boolean mask for non-NaN values
+        # Apply the mask to each column of the xyz array
+        coords['xyz'][mask] = xyz_points[mask]
+        coords['Eastings'] = coords['xyz'][:, 0]
+        coords['Northings'] = coords['xyz'][:, 1]
+        coords['Elevation'] = coords['xyz'][:, 2]
+        coords['localX'], coords['localY'] = local_transform_points(coords['local_grid_origin'][0], coords['local_grid_origin'][1], np.radians(coords['local_grid_angle']), 1, coords['xyz'][:, 0], coords['xyz'][:, 1])
+       
+    return coords, xyz_ray
 
 def camera_seam_blend(IrIndv):
     """
@@ -625,28 +789,18 @@ def local_transform_points(xo, yo, ang, flag, xin, yin):
     """
     Transforms between local World Coordinates and Geographical World Coordinates.
     
-    Parameters:
-    xo : float
-        X coordinate of the local origin in geographical coordinates.
-    yo : float
-        Y coordinate of the local origin in geographical coordinates.
-    ang : float
-        Angle (in radians) between the local X axis and the geographical X axis.
-    flag : int
-        Direction of transformation (1: Geo to Local, 0: Local to Geo).
-    xin : ndarray
-        Input X coordinates (Local or Geo depending on transformation direction).
-    yin : ndarray
-        Input Y coordinates (Local or Geo depending on transformation direction).
+    :param xo (float): X coordinate of the local origin in geographical coordinates.
+    :param yo (float): Y coordinate of the local origin in geographical coordinates.
+    :param ang (float): Angle (in radians) between the local X axis and the geographical X axis.
+    :param flag (int): Direction of transformation (1: Geo to Local, 0: Local to Geo).
+    :param xin (ndarray): Input X coordinates (Local or Geo depending on transformation direction).
+    :param yin (ndarray): Input Y coordinates (Local or Geo depending on transformation direction).
     
-    Returns:
-    xout : ndarray
-        Transformed X coordinates.
-    yout : ndarray
-        Transformed Y coordinates.
+    :return: 
+    - xout (ndarray): Transformed X coordinates.
+    - yout (ndarray): Transformed Y coordinates.
     """
     
-
     if flag == 1:
         # Transform from Geographical to Local
         easp = xin - xo
@@ -663,6 +817,15 @@ def local_transform_points(xo, yo, ang, flag, xin, yin):
     return xout, yout
 
 def filter_regions(img):
+    """
+    Filters regions in an image by finding and keeping only the largest contour.
+
+    :param img (ndarray): Input image to process, in BGR color format.
+    
+    :return: 
+    - img (ndarray): The input image with all regions outside the largest contour set to black.
+    - contours (list): A list of contours found in the binary mask of the image.
+    """
     # Load image and convert to grayscale
     gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -688,7 +851,14 @@ def filter_regions(img):
     return img, contours
 
 def prompt_for_directory(prompt_message):
-    """Opens a dialog to select a directory and returns the selected path."""
+    """
+    Opens a dialog to prompt the user for selecting a directory, or allows manual input.
+
+    :param prompt_message (str): The message to display in the dialog prompting the user to select a directory.
+    
+    :return: 
+    - str: The path of the selected directory or manually entered path.
+    """
     try:
         Tk().withdraw()  # Hide the root Tk window
         folder = filedialog.askdirectory(title=prompt_message)

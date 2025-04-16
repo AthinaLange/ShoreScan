@@ -1,44 +1,31 @@
-'''
+"""
 utils_runup.py
-This module provides functions for defining the U,V coordinates for an ARGUS-style camera and extracting individual transect images from a ras image.
 
-Dependencies:
--------------
-- os
-- json
-- yaml
-- opencv (cv2)
-- utm
-- glob
-- datetime
-- pandas
-- numpy
-- pathlib
-- tkinter
-- plotly
-- sklearn
+This module provides functions for computing runup statistics and getting TWL from the USGS TWL&CC forecast.
 
-'''
-# Custom Modules
-from RunUpTimeseriesFunctions_CHI import *
-from utils_CIRN import *
-
-# External Libraries
-import os
-import json
-import yaml
-import cv2
-import utm
+"""
 import glob
-from datetime import datetime, timedelta
-import pandas as pd
-import numpy as np
+import json
+import os
+import time
+from datetime import datetime
+from math import cos, degrees, radians
 from pathlib import Path
-
 from tkinter import Tk, filedialog
-from tkinter.filedialog import askdirectory
-import plotly.graph_objects as go
+
+import cv2
+import numpy as np
+import pandas as pd
+import requests
+import scipy.io
+import scipy.signal
+from geopy.distance import geodesic
+from plotly.graph_objects import go
+from scipy.signal import find_peaks
 from sklearn.linear_model import LinearRegression
+import yaml
+
+import utils_CIRN
 
 ## ------------------- define transects -------------------------
 def define_UV_transects(productsPath, intrinsics, extrinsics, pixsaveDir=None, yaml_filename="transects.yaml", pix_filename="output.pix"):
@@ -75,7 +62,7 @@ def define_UV_transects(productsPath, intrinsics, extrinsics, pixsaveDir=None, y
         pix_filename = os.path.join(pix_filename, ".pix")
 
     # Get coordinates for the transect
-    output_x = get_xy_coords(products_x)
+    output_x = utils_CIRN.get_xy_coords(products_x)
 
     all_UV_filtered = []  # To store concatenated valid UV values
     data_to_save = {}
@@ -84,7 +71,7 @@ def define_UV_transects(productsPath, intrinsics, extrinsics, pixsaveDir=None, y
         xyz = data['xyz']
         
         # Convert XYZ to UV coordinates
-        UVd, flag = xyz_to_dist_uv(intrinsics, extrinsics, xyz)
+        UVd, flag = utils_CIRN.xyz_to_dist_uv(intrinsics, extrinsics, xyz)
         if UVd.shape[0] == 2 and UVd.shape[1] != 2:
             UVd = UVd.T  # Ensure shape is (#, 2)
         
@@ -255,10 +242,30 @@ def split_tiff(config = None, imageDir = None, yamlDir = None, camera_settingsPa
         if isinstance(config, str) and os.path.exists(config):
             with open(config, "r") as f:
                 config = json.load(f)
+
     imageDir = config.get("imageDir", imageDir)
     yamlDir = config.get("yamlDir", yamlDir)
     ras_images = glob.glob(f"{imageDir}/*ras.tiff")
     camera_settings = get_camera_settings(file_path = config.get("camera_settingsPath", camera_settingsPath))
+    # Get products_grid
+    productsPath = config.get("productsPath", {})
+    if not productsPath.endswith('.json'):
+        productsPath = os.path.join(productsPath, "products.json")  # Append 'products.json' if it's a directory
+
+    with open(productsPath, "r") as file:
+        products = json.load(file)
+    if isinstance(products, list):
+        products_x = next((item for item in products if item.get("type") == "xTransect"), None)
+    elif isinstance(products, dict) and products.get("type") == "xTransect":
+        products_x = products
+    else:
+        products_x = None  # If neither, return None
+
+    if products_x:
+        y_def = np.sort(products_x['y'])[::-1]
+    else: 
+        y_def = []
+
     for img_path in ras_images:
         print(img_path)
         filename = Path(img_path).stem
@@ -268,22 +275,27 @@ def split_tiff(config = None, imageDir = None, yamlDir = None, camera_settingsPa
         
         coordinate_file_path = get_coordinate_file_for_timestamp(camera_config, timestamp)
         print(coordinate_file_path)
+
         base_name = os.path.splitext(os.path.basename(coordinate_file_path))[0]
-        expected_transect_file = os.path.join(yamlDir, f"{base_name}_transect0.yaml")
+        if len(y_def) > 0:
+            expected_transect_file = os.path.join(yamlDir, f"{base_name}_transect{y_def[0]}.yaml")
+        else:
+            expected_transect_file = os.path.join(yamlDir, f"{base_name}_transect0.yaml")
+
         # Check if transect file exists
         if os.path.exists(expected_transect_file):
             print(f"Transect files already exist for {coordinate_file_path}, skipping.")
         else:
             print(f"Splitting coordinates from {coordinate_file_path} into transects...")
-            split_and_save_pixcoordinates(coordinate_file_path, yamlDir, reverse_data=reverse_flag, threshold=100)
+            split_and_save_pixcoordinates(coordinate_file_path, yamlDir, reverse_data=reverse_flag, threshold=100, y_def = y_def)
 
         try:
             print(f"Processing and splitting image: {img_path}")
-            process_and_split_image(image_path = img_path, coordinate_file_path=coordinate_file_path, reverse_data = reverse_flag, threshold = threshold)
+            process_and_split_image(image_path = img_path, coordinate_file_path=coordinate_file_path, reverse_data = reverse_flag, threshold = threshold, output_path = os.path.join(os.path.dirname(img_path), 'split_timestacks'), y_def = y_def)
         except Exception as e:
             print(f"Error processing image {img_path}: {e}")
         
-def split_and_save_pixcoordinates(coordinate_file_path, yamlDir, reverse_data = False, threshold = 100):
+def split_and_save_pixcoordinates(coordinate_file_path, yamlDir, reverse_data = False, threshold = 100, y_def = []):
     """
     Splits `.pix` coordinate data into individual transects based on detected jumps and saves them.
 
@@ -291,6 +303,7 @@ def split_and_save_pixcoordinates(coordinate_file_path, yamlDir, reverse_data = 
     :param output_path: (str) Directory where transect files will be saved.
     :param reverse_data: (bool, optional) Reverse order of data points (default: False).
     :param threshold: (int, optional) Distance threshold to detect jumps (default: 100).
+    :param y_def: (ndarray, optional) Along-shore transect locations - otherwise will enumerate.
     :raises ValueError: If the file cannot be loaded.
     """
     # Load the data (x, y points)
@@ -315,9 +328,11 @@ def split_and_save_pixcoordinates(coordinate_file_path, yamlDir, reverse_data = 
             'U': ', '.join(map(str, transect['x'].tolist())),
             'V': ', '.join(map(str, transect['y'].tolist()))
         }
+        if len(y_def) > 0 and i < len(y_def):
+            transect_file = os.path.join(yamlDir, f"{base_name}_transect{y_def[i]}.yaml")
+        else:
+            transect_file = os.path.join(yamlDir, f"{base_name}_transect{i}.yaml")
 
-        transect_file = os.path.join(yamlDir, f"{base_name}_transect{i}.yaml")
-        
         with open(transect_file, 'w') as file:
             yaml.dump(transect_dict, file, default_flow_style=False)
 
@@ -326,7 +341,7 @@ def split_and_save_pixcoordinates(coordinate_file_path, yamlDir, reverse_data = 
             file.write("# V: column pixel location\n")
         print(f"Saved {transect_file}")
 
-def process_and_split_image(image_path, coordinate_file_path, output_path = None, reverse_data = False, plot = False, threshold = 100):
+def process_and_split_image(image_path, coordinate_file_path, output_path = None, reverse_data = False, plot = False, threshold = 100, y_def = []):
     """
     Process and split a `.ras` timestack image based on transect data.
 
@@ -336,10 +351,12 @@ def process_and_split_image(image_path, coordinate_file_path, output_path = None
     :param reverse_data: (bool, optional) Reverse the order of data points (default: False).
     :param plot: (bool, optional) Plot transects and fitted lines (default: False).
     :param threshold: (int, optional) Threshold to detect jumps (default: 100).
+    :param y_def: (ndarray, optional) Along-shore transect locations - otherwise will enumerate.
     :raises ValueError: If the image cannot be loaded.
     """
     if not output_path:
         output_path = os.path.dirname(image_path)  # Use the image's directory instead
+
     # Step 1: Load the image
     image = cv2.imread(image_path)
     if image is None:
@@ -386,181 +403,438 @@ def process_and_split_image(image_path, coordinate_file_path, output_path = None
         cropped_image = image[:, shift:shift + transect_width]
         shift += transect_width
         if cropped_image.size > 0:
-            output_file = os.path.join(output_path, f"{base_image_name}_transect{i}.png")
+            if len(y_def) > 0 and i < len(y_def):
+                output_file = os.path.join(output_path, f"{base_image_name}_transect{y_def[i]}.png")
+            else:
+                output_file = os.path.join(output_path, f"{base_image_name}_transect{i}.png")
             cv2.imwrite(output_file, cropped_image)
             print(f"Saved {output_file}")
 
 
 
-
-
-
-
-## ------------------- timestack runup stuff -------------------
-
-def get_runup(config = None, timestackDir = None, overlayDir = None, site_settingsPath = None):
+## ----------- TWL forecast -----------
+def bounding_box(lat, lon, distance_m):
     """
-    Processes extracted runup data, computes shoreline elevations, runup statistics and saves to netCDF.
-
-    :param config: (dict, optional) Configuration dictionary containing paths and values.
-    :param timestackDir: (str, optional) Path to the timestacks folder.
-    :param overlayDir: (str, optional) Output folder for overlays (default: 'timestackDir/overlays').
-    :param site_settingsPath: (str, optional) Path to site settings file.
-
-    :return: None
+    Calculate the bounding box for a given lat, lon, and distance in meters.
+    :param lat: Latitude of the center point (in decimal degrees).
+    :param lon: Longitude of the center point (in decimal degrees).
+    :param distance_m: Distance in meters for the bounding box.
+    :return: Dictionary with min_lat, max_lat, min_lon, max_lon.
     """
-    config = config or {}  # Ensure config is always a dictionary
+    # Earth's radius in meters
+    R = 6378137
 
-    timestackDir = config.get("timestackDir", timestackDir)
-    overlayDir = config.get("overlayDir", overlayDir)
-    site_settingsPath = config.get("site_settingsPath", site_settingsPath)
+    # Offsets in radians
+    d_lat = distance_m / R
+    d_lon = distance_m / (R * cos(radians(lat)))
 
-    # Ensure timestackDir is set
-    if not timestackDir:
-        raise ValueError("A timestack directory must be provided either as an argument or in the config.")
-    overlayDir = overlayDir or os.path.join(timestackDir, "overlays")
+    # Calculate the bounding box
+    min_lat = lat - degrees(d_lat)
+    max_lat = lat + degrees(d_lat)
+    min_lon = lon - degrees(d_lon)
+    max_lon = lon + degrees(d_lon)
 
-    datastore = ImageDatastore(timestackDir)
-    datastore.load_images()
-    # Remove all non-RAS image types
-    for img_type in ['bright', 'dark', 'var', 'timex', 'snap']:
-        datastore.remove_images_by_type(img_type)
+    return {
+        "min_lat": min_lat,
+        "max_lat": max_lat,
+        "min_lon": min_lon,
+        "max_lon": max_lon
+    }
 
-    # Filter unmatched images and extract metadata
-    datastore.filter_unmatched_images(overlayDir)
-    datastore.extract_metadata()
-    datastore.image_stats()
-
-    for site, cameras in datastore.images.items():
-        for camera, years in cameras.items():
-            for year, months in years.items():
-                for month, days in months.items():
-                    for day, times in days.items():
-                        for time, images_by_type in times.items():
-                            for image_type, images in images_by_type.items():
-                                for img in images:
-                                    print(img['path'])
-
-                                    # Extract metadata
-                                    metadata = img.get('metadata', {})
-                                    
-                                    # Extract 'extrinsics' and 'intrinsics'
-                                    extrinsics = metadata.get("extrinsics", None)
-                                    intrinsics = metadata.get("intrinsics", None)
-                                    
-                                    # Extract 'transect' and its 'U' and 'V'
-                                    transect = metadata.get("transect", {})
-                                    U = np.array(transect.get("U", []))
-                                    V = np.array(transect.get("V", []))
-                                    transect_date = transect.get("transect_date", [])
-
-                                    # Get corresponding runup data
-                                    runup_file = os.path.join(overlayDir, f'runup_{Path(img["path"]).stem}.txt')
-                                    if os.path.isfile(runup_file):
-                                        runup_data = np.genfromtxt(runup_file, delimiter=None)  # Auto-detect delimiter
-                                        # Skip files that are **entirely NaN**
-                                        if np.all(np.isnan(runup_data)):
-                                            print(f"Skipping {runup_file} (all values are NaN)")
-                                            continue  # Don't plot this file
-                                        else:
-                                            h_runup_id = np.round(len(U) - runup_data).astype(int)  
-                                    else:
-                                        print(f"No runup data exists for {Path(img['path']).stem}. Please rerun extract_runup.")
-                                        continue
-
-                                    # Extract date and transect number
-                                    fileName = Path(img['path']).stem.split('.')
-                                    date = fileName[0]
-                                    try:
-                                        transectNum = fileName[8].split('_')[1][-1]
-                                    except IndexError:
-                                        print(f"Could not determine transect number for {img['path']}")
-                                        continue
-
-                                    # Get DEM and compute shoreline elevation
-                                    DEM = 0#get_DEM(date = date, site = site, camNum = camera, transectNum = transectNum)
-                                    xyz = np.zeros((3,3))#dist_uv_to_xyz(intrinsics, extrinsics, np.column_stack((U, V)), 'z', DEM['z'])
-                                    Hrunup = U#xyz[h_runup_id, 0]
-                                    Zrunup = V#xyz[h_runup_id, 2]
-                                    
-                                    # Store results in netCDF
-                                    sites = get_site_settings(file_path = site_settingsPath)
-                                    site_dict = sites.get(site, {})
-                                    if "siteInfo" not in site_dict:
-                                        print(f"Missing site info for {site}. Skipping.")
-                                        continue
-                                    site_dict["siteInfo"]["camNum"] = camera
-                                    site_dict["siteInfo"]["rNumber"] = transectNum
-                                    write_netCDF(site_dict, img['path'], U, V, transect_date, xyz,  Hrunup, Zrunup)
-                                
-    return 
-
-def get_DEM(date, site, camNum, transectNum):
+def get_valid_latitude():
     """
-     df = pd.read_csv('Marconi 2024-10-23.csv')
-    t = np.linspace(0, 1, len(df))
-    t_fine = np.linspace(0, 1, 50)
-    E_fine = interp1d(t, df['Easting'], kind='cubic')(t_fine)
-    N_fine = interp1d(t, df['Northing'], kind='cubic')(t_fine)
-    Z_fine = interp1d(t, df['Elevation'], kind='cubic')(t_fine)
-    
-    F = griddata((E_fine, N_fine), Z_fine, (xyz[:, 0], xyz[:, 1]), method='linear')
-    DEM_z = pd.Series(F).rolling(window=25, win_type='gaussian', center=True).mean(std=2).values
+    Prompt the user to enter a valid latitude value between -90 and 90.
+    :return: A valid latitude value as a float.
     """
-    return
+    while True:
+        try:
+            lat = float(input("Enter latitude: "))
+            if -90 <= lat <= 90:
+                return lat
+            else:
+                print("Invalid latitude. Please enter a value between -90 and 90.")
+        except ValueError:
+            print("Invalid input. Please enter a numeric value for latitude.")
 
+def get_valid_longitude():
+    """
+    Prompt the user to enter a valid longitude value between -180 and 180.
+    :return: A valid longitude value as a float.
+    """
+    while True:
+        try:
+            lon = float(input("Enter longitude: "))
+            if -180 <= lon <= 180:
+                return lon
+            else:
+                print("Invalid longitude. Please enter a value between -180 and 180.")
+        except ValueError:
+            print("Invalid input. Please enter a numeric value for longitude.")
 
+def validate_lat_lon(lat, lon):
+    """
+    Validate that the provided lat and lon are within valid ranges.
+    :param lat: Latitude value.
+    :param lon: Longitude value.
+    :return: Validated lat and lon.
+    """
+    if lat is not None:
+        if not (-90 <= lat <= 90):
+            raise ValueError("Latitude must be between -90 and 90.")
+    if lon is not None:
+        if not (-180 <= lon <= 180):
+            raise ValueError("Longitude must be between -180 and 180.")
+    return lat, lon
 
+def make_request_with_retry(url, params=None):
+    """
+    Make a GET request and handle rate limiting.
+    If the API rate limit is exceeded (HTTP 429), the function will wait for the duration provided
+    in the 'X-Retry-After' header before retrying the request.
+    """
+    while True:
+        response = requests.get(url, params=params)
+        if response.status_code == 429:
+            # Get the retry delay from the X-Retry-After header
+            retry_after = response.headers.get("X-Retry-After", "1")  # Default to 1 second if not set
+            try:
+                retry_after = float(retry_after)  # Convert the value to a float
+            except ValueError:
+                retry_after = 1  # In case the value cannot be converted, use a default value of 1 second
+            print(f"Rate limit exceeded. Retrying after {retry_after} seconds...")
+            time.sleep(retry_after)
+        else:
+            response.raise_for_status()  # If status is not 429, raise the usual exceptions
+            return response.json()
 
-## ------------------- Save data --------------------
-def write_netCDF(site, img_path, U, V, transect_date, xyz, Hrunup, Zrunup):
-        
-    #history = f"{datetime.now(timezone.utc).isoformat()} Using Python version {sys.version}, netCDF4 version {nc.__version__}, NumPy version {np.__version__}"
+def fetch_water_level_data(region_choice=None, site_id=None, lat=None, lon=None, timestamp=None,  distance_m=500,  save_folder=None):
+    """
+    Fetch water level data from the USGS TWL&CC viewer API based on coordinates and timestamp.
+    If any required parameter is missing, the function prompts for it interactively.
+    :param lat: Latitude of the location (optional if site_id is provided).
+    :param lon: Longitude of the location (optional if site_id is provided).
+    :param timestamp: Timestamp in "YYYY-MM-DD HH:MM:SS" format.
+    :param region_choice: The selected region index.
+    :param distance_m: Search radius in meters (default: 500).
+    :param site_id: The site ID (optional if lat/lon are provided).
+    :param save_folder: The folder where the data should be saved (optional).
+    :return: Dictionary of water level data.
+    """
+    BASE_URL = "https://coastal.er.usgs.gov/hurricanes/research/twlviewer/api/"
 
-    # ----------------- U,V -----------------
-    U = U
-    V = V
-
-    # ----------------- Camera -----------------
-    ECamera = float(yamlData['x'])
-    NCamera = float(yamlData['y'])
-    zCamera = float(yamlData['z'])
-
-    # ----------------- UTM -----------------
-    UTM_E = xyz[:,0]
-    UTM_N = xyz[:,1]
-
-
-    # ----------------- Lat/Lon -----------------
-    lat, lon = utm.to_latlon(UTM_E, UTM_N, int(site["siteInfo"]["utmZone"][0:2]), site["siteInfo"]["utmZone"][2:3])
-
-    # ----------------- z -----------------
-    z = xyz[:,2]
-
-    # ----------------- X,Y -----------------
-    X = U
-    Y = V
-    # ----------------- Time  -----------------
-    t_sec = np.around(np.arange(0, sample_period_length*60, 1/sample_frequency_Hz)[:RAW.shape[0]], decimals=3) # timeseries in seconds
-    T = np.array([fileDatetime + timedelta(seconds = t) for t in t_sec])
-
-    # ----------------- Runup -----------------
-    Hrunup = np.array(Hrunup)
-    Zrunup = np.array(Zrunup)
-
-    # ----------------- TWL stats -----------------
-    # window length with 8 windows
-    #window_length = np.floor(len(twl) / 8).astype(int) - 1
-    #window_length = window_length.item()
-    nperseg = 1 #<< window_length.bit_length() # next power of two for length
-    
-    
     try:
-        TWLstats = runupStatistics_CHI(Zrunup, t_sec, nperseg, site["sampling"]["freqLimits"][1])
+        # Regions
+        regions_url = f"{BASE_URL}regions"
+        regions = make_request_with_retry(regions_url)
+        if region_choice is None:
+            print("Available Regions:")
+            for i, region in enumerate(regions):
+                print(f"{i + 1}: {region['fullName']}")
+            region_choice = int(input("Select a region by number: "))
+            if region_choice < 1 or region_choice > len(regions):
+                raise ValueError("Invalid region choice.")
+        selected_region = regions[region_choice - 1]
+        region_id = selected_region['id']
+        region_name = selected_region['fullName']
+
+        # Timestamp
+        if timestamp is None:
+            timestamp = input("Enter timestamp (YYYY-MM-DD): ")
+        user_time = datetime.strptime(timestamp, "%Y-%m-%d")
+
+        if site_id is not None:
+            file_name = f"{region_name.replace(' ', '_')}_{site_id}_{user_time.date()}.json"
+            file_path = os.path.join(save_folder, file_name)
+        
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as f:
+                water_level = json.load(f)
+        else:
+
+            # Forecasts
+            forecasts_url = f"{BASE_URL}regions/{region_id}/forecasts?date={user_time.date()}&time=00:00:00"
+            forecasts = make_request_with_retry(forecasts_url)
+            forecast_id = forecasts[0]['id']
+
+            # Site ID
+            if site_id is None:
+                # Prompt for lat, lon, and timestamp if not provided
+                if lat is None:
+                    lat = get_valid_latitude()
+                if lon is None:
+                    lon = get_valid_longitude()
+                
+                bbox = bounding_box(lat, lon, distance_m)
+
+                # Validate lat and lon
+                lat, lon = validate_lat_lon(lat, lon)
+                params = {
+                    "siteLatitude": [f"gte_{bbox['min_lat']}", f"lte_{bbox['max_lat']}"],
+                    "siteLongitude": [f"gte_{bbox['min_lon']}", f"lte_{bbox['max_lon']}"],
+                }
+
+                # Retrieve site data
+                sites_url = f"{BASE_URL}regions/{region_id}/forecasts/{forecast_id}/sites?pageSize=100"
+                sites = make_request_with_retry(sites_url, params=params)
+
+                # Find the closest site
+                closest_site = None
+                min_distance = 20  # Minimum distance threshold in kilometers
+                for site in sites:
+                    site_coords = (site['siteLatitude'], site['siteLongitude'])
+                    distance = geodesic((lat, lon), site_coords).kilometers
+                    if distance < min_distance:
+                        closest_site = site
+                        min_distance = distance
+
+                if not closest_site:
+                    raise ValueError("No suitable site found near the provided coordinates.")
+
+                site_id = closest_site['id']
+            
+                    # Determine file save path
+            if save_folder is None:
+                save_folder = "data_wl"
+            
+            os.makedirs(save_folder, exist_ok=True)
+
+            file_name = f"{region_name.replace(' ', '_')}_{site_id}_{user_time.date()}.json"
+            file_path = os.path.join(save_folder, file_name)
+            
+            print(file_path)
+
+            # Fetch file
+            water_levels_url = f"{BASE_URL}regions/{region_id}/forecasts/{forecast_id}/sites/{site_id}/waterLevels"
+            data = make_request_with_retry(water_levels_url)
+            water_level = {key: [] for key in data[0].keys()}
+
+            for entry in data:
+                for key, value in entry.items():
+                    try:
+                        water_level[key].append(float(value))
+                    except ValueError:
+                        water_level[key].append(value)
+
+            # Save the data to the file
+            with open(file_path, 'w') as json_file:
+                json.dump(water_level, json_file, indent=4)
+
+            print(f"Water level data saved to {file_path}")
+
+        water_level['dateTime'] = pd.to_datetime(water_level['dateTime'])
+
+        return water_level
     except Exception as e:
-        print(f"Error running runup(): {e}")  # Print error message
-        TWLstats = {}  # Fallback to an empty dictionary to prevent crashes
+        print(f"Error processing {timestamp}: {e}")
+
+## ----------- Runup statistics -----------
+def runupStatistics_CHI(eta, t_sec, nperseg, f_lims=np.array([0.004, 0.04, 0.35]), grd=None):
+    """
+    Computes statistical parameters of runup from a water level time series.
+
+    :param eta (ndarray): Runup time series (tide should be subtracted).
+    :param t_sec (ndarray): Time array in seconds corresponding to eta.
+    :param nperseg (int): Window length for spectral analysis.
+    :param f_lims (ndarray): Array of frequency limits [min IG, IG/SS split, max SS] (default: [0.004, 0.04, 0.35]).
+    :param grd (dict, optional): Bathymetric data along transect. Should contain:
+        - 'x': Local cross-shore coordinates (in meters),
+        - 'z': Elevation (in meters).
+
+    :return: 
+    dict: Dictionary of computed runup statistics, including:
+        - "setup": Mean water level.
+        - "eta2": 2% exceedance level from full time series.
+        - "R2": 2% exceedance level from runup peaks.
+        - "S2": Swash height (R2 - setup).
+        - "Ts", "Tr": Swash and runup periods (time/ # of peaks).
+        - "Tp": Peak wave period.
+        - "Ss": Significant swash (4 * sqrt(var(eta))).
+        - "Ssin": Significant incident swash.
+        - "Ssig": Significant infragravity swash.
+        - "Sst": Total significant swash.
+        - "f", "S": Frequency array and spectral density.
+        - "beta_S2006": Beach slope from ±2 std elevation band (if grd provided).
+        - "beta_Z": Beach slope from total elevation range (if grd provided).
+
+    Notes:
+        - Modified from Dave's version of runupFullStats... and subroutines.
+        - Hardcoded:
+            - nbins = 20; number of bins for calculating CDF
+            - MinPeakProminence = np.std(eta)/3; Minimum prominence for find peaks
+            - distance=3; minimum distance between peaks
+    """
+    
+    print('computing runup stats')
+    RUstats = {
+        "R2": [],
+        "Tr": [],
+        "S2": [],
+        "Ts": [],
+        "setup": [],
+        "eta2": [],
+        "f": [],
+        "S": [],
+        "Tp": [],
+        "Ss": [],
+        "Ssin": [],
+        "Ssig": [],
+        "Sst": [],
+        "beta_S2006":[],
+        "beta_Z": []
+    }
+
+    # sample rate
+    dt = np.mean(np.diff(t_sec))
+
+    # Minimum prominence for find peaks
+    MinPeakProminence = np.std(eta) / 3
+
+    # Number of bins for cummulative distribution function
+    nbins = 20
+
+    ## Setup
+    setup = np.mean(eta)
+    RUstats["setup"] = setup
+
+    # 2# exceedence value of eta i.e. full time series not peaks
+    # Do this using CDF.
+    # Define bins.
+    c, binCenters = CDF_by_bins(eta, nbins)
+    id = np.argmin(np.abs(c - 0.98))
+    eta2 = np.interp(0.98, c, binCenters)
+    RUstats["eta2"] = eta2
+
+    ## Runup and swash
+    # Swash is defined as the range of values between successive zero
+    # crossings.
+    # find runup peaks
+    peaks, _ = find_peaks(eta, prominence=MinPeakProminence, distance=3)
+    # plt.plot(eta)
+    # plt.plot(peaks, eta[peaks], "x")
+    # plt.xlim([0,100])
+    # plt.show()
+
+    # 2# exceedence value runup and swash
+    R = eta[peaks]
+    c, binCenters = CDF_by_bins(R, nbins)
+    R2 = np.interp(0.98, c, binCenters)
+    # 2% excceedence
+    RUstats["R2"] = R2
+    RUstats["S2"] = R2 - np.mean(eta)
+
+    # swash period (same as runup period?!)
+    RUstats["Ts"] = t_sec[-1] / len(peaks)
+    RUstats["Tr"] = t_sec[-1] / len(peaks)
+
+    # Power Spectral Density
+    f, S = scipy.signal.welch(
+        eta, fs=1 / dt, window="hann", nperseg=nperseg, noverlap=nperseg * (3 / 4)
+    )
+    RUstats["f"] = f
+    RUstats["S"] = S
+
+    # Peak frequency
+    fp = f[np.argmax(S)]
+    # Peak period.
+    Tp = 1 / fp
+    RUstats["Tp"] = Tp
+
+    # significant swash = Ss
+    Ss = 4 * np.sqrt(np.std(eta))
+    RUstats["Ss"] = Ss
+    # incident and IG band significant swash = Ssin & Ssig
+    df = np.mean(np.diff(f))
+
+    inc = (f >= f_lims[1]) & (f < f_lims[2])
+    ig = (f >= f_lims[0]) & (f < f_lims[1])
+    # incident
+    varin = sum(S[inc]) * df
+    # IG
+    varig = sum(S[ig]) * df
+    # Total
+    vartot = sum(S[ig | inc]) * df
+
+    RUstats["Ssin"] = 4 * np.sqrt(varin)
+    RUstats["Ssig"] = 4 * np.sqrt(varig)
+    RUstats["Sst"] = 4 * np.sqrt(vartot)
 
 
-    return
+    if grd is not None:
+        stdEta = np.std(eta)
 
+        maxEta = setup + 2 * stdEta
+        minEta = setup - 2 * stdEta
+        botRange = np.where((grd['z'] >= minEta) & (grd['z'] <= maxEta))[0]
+        fitvars = np.polyfit(grd['x'][botRange], grd['z'][botRange], 1)
+        beta = fitvars[0]
+        RUstats["beta_S2006"] = beta
+
+        maxEta = np.max(eta)
+        minEta = np.min(eta)
+        botRange = np.where((grd['z'] >= minEta) & (grd['z'] <= maxEta))[0]
+        fitvars = np.polyfit(grd['x'][botRange], grd['z'][botRange], 1)
+        beta = fitvars[0]
+        RUstats["beta_Z"] = beta
+
+    return RUstats
+
+def CDF_by_bins(x, nbins):
+    """
+    Computes the empirical cumulative distribution function (CDF) of a dataset using histogram binning.
+
+    :param x (ndarray): Input 1D array of data.
+    :param nbins (int): Number of bins to use in histogram.
+
+    :return: 
+    - c (ndarray): Cumulative distribution values.
+    - binCenters (ndarray): Centers of the bins used for the CDF.
+    """
+    # Do this using CDF.
+    # Define bins.
+    binWidth = (np.max(x) - np.min(x)) / nbins
+    bins = np.arange(np.min(x), np.max(x), binWidth)
+    binCenters = bins + 0.5 * binWidth
+    c = np.zeros(len(bins))  # cdf
+    for ii in np.arange(1, len(bins)).reshape(-1):
+        c[ii] = sum(x < bins[ii]) / len(x)
+    return c, binCenters
+
+def runup_stats_CHI(Ibp, exc_value=None):
+    """
+    Computes the 2% runup (R2) from instantaneous beach position using the zero-downcrossing method.
+
+    :param Ibp (xarray.DataArray): Instantaneous vertical beach position (in meters relative to still water level).
+    :param exc_value (float, optional): Outlier threshold (exclude values with abs(Ibp) > exc_value). Default is None.
+
+    :return: 
+    xarray.DataArray: Scalar containing the 2% runup value (R2), with units in meters and metadata attributes.
+
+    @author: rfonsecadasilva
+    """
+    if exc_value:
+        bad_data = (
+            xr.apply_ufunc(np.isnan, Ibp.where(lambda x: np.abs(x) > exc_value)).sum()
+            / Ibp.size
+            * 100
+        ).values.item()
+        if bad_data != 100:
+            print(f"{100-bad_data:.1f} % of runup data is corrupted")
+        Ibp = Ibp.where(lambda x: np.abs(x) < exc_value, drop=True)
+    time_cross = Ibp.where(
+        ((Ibp.shift(t=1) - Ibp.mean(dim="t")) * (Ibp - Ibp.mean(dim="t")) < 0)
+        & (Ibp - Ibp.mean(dim="t") > 0),
+        drop=True,
+    )  # calculate crossing points for zero-downcrossing on swash
+
+    R2 = (
+        Ibp.groupby_bins("t", time_cross.t).max(dim="t").quantile(0.98).values
+    )  # calculate 2% runup,dim="t_bins"
+    print(R2)
+    R2 = xr.DataArray(R2, dims=())
+
+    R2.attrs["standard_name"], R2.attrs["long_name"], R2.attrs["units"] = (
+        "2% runup",
+        "2% runup",
+        "m",
+    )
+    return R2
