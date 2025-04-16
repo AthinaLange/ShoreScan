@@ -9,9 +9,11 @@
     "pixsaveDir":"/path/to/folder/to/save/pix",
     "netcdfDir": "/path/to/netcdf",
     "shorelineDir": "/path/to/shoreline",
+    "twlDir": "/path/to/twl_forecast",
     "camera_settingsPath": "/path/to/camera_settings.json",
     "site_settingsPath": "/path/to/site_settings.json",
     "productsPath": "/path/to/products/dictionary/CACO03_products.json",
+    "demPath": "/path/to/dem.tif",
     "segformerWeightsDir": "/path/to/segformer/weights",
     "segformerModel": "SegFormer_Madeira_Duck_equal_finetune_Waiakane_fullmodel.h5",
     "segformerCodeDir": "/path/to/segformer/code",
@@ -26,5 +28,8 @@
         "bright" : 35,
         "dark" : 20,
         "var" : 30
-    }
+    },
+    "f_lims": [0.004, 0.04, 0.35],
+    "twl_region": "TWL region_id as int",
+    "site_id": "TWL site_id as int"
 }
