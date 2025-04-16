@@ -35,8 +35,6 @@ CoastCam_processing.ipynb
 ```
 
 
-NOTE: 'write_netCDF' doesn't fully work yet bc dist_uv_to_xyz and DEM stuff needs to be written
-
 ## Requirements
 - .png/.jpg images of images to be rectified, individual or concatinated timestacks from ARGUS-style cameras. Must be dimensions of time x length(U,V) coordinates
 - config.json - definitions for all directories and variables
@@ -46,6 +44,7 @@ NOTE: 'write_netCDF' doesn't fully work yet bc dist_uv_to_xyz and DEM stuff need
 - site_settings.json - info for netCDF
 - products.json - info for projection grid
 - U,V .pix coordinates (supplied to ARGUS-style camera) - location given in camera_settings.json - can also be definied in code
+- DEM.tif for projection onto surface
 
 
 
@@ -66,13 +65,6 @@ site_settings.json:
         "SITE_ID": {  // Each site (e.g., "CACO03", "SITEB") is a key containing site-specific information
 		"siteName": "Full site name",  // Descriptive name of the site
 		"shortName": "Short identifier",  // Abbreviated site name
-		"directories": {  // File path locations for different types of data
-                	"jpgDir": "Path to JPG image files",
-                	"netcdfDir": "Path to NetCDF files",
-                	"runupDir": "Path to runup analysis data",
-                	"topoDir": "Path to topographic data",
-			"yamlDir": "Path to YAML files"
-			},
 		"siteInfo": {  // Metadata related to the site
                 	"siteLocation": "Geographical location of the site",
                 	"dataOrigin": "Organization responsible for the data",
@@ -134,9 +126,11 @@ config.json:
     "pixsaveDir":"/path/to/folder/to/save/pix",
     "netcdfDir": "/path/to/netcdf",
     "shorelineDir": "/path/to/shoreline",
+    "twlDir": "/path/to/twl_forecast",
     "camera_settingsPath": "/path/to/camera_settings.json",
     "site_settingsPath": "/path/to/site_settings.json",
     "productsPath": "/path/to/products/dictionary/CACO03_products.json",
+    "demPath": "/path/to/dem.tif",
     "segformerWeightsDir": "/path/to/segformer/weights",
     "segformerModel": "SegFormer_Madeira_Duck_equal_finetune_Waiakane_fullmodel.h5",
     "segformerCodeDir": "/path/to/segformer/code",
@@ -151,8 +145,12 @@ config.json:
         "bright" : 35,
         "dark" : 20,
         "var" : 30
-    }
+    },
+    "f_lims": [0.004, 0.04, 0.35],
+    "twl_region": "TWL region_id as int",
+    "site_id": "TWL site_id as int"
 }
+
 
 
 Example Folder Structure
