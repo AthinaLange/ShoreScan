@@ -1,4 +1,4 @@
-name: shorescan
+name: gym
 channels:
   - conda-forge
   - nvidia
@@ -21,15 +21,18 @@ dependencies:
  - plotly
  - scikit-learn
  - ipykernel
- - opencv
+ - opencv 
  - piexif
  - pip:
     - doodleverse_utils
     - transformers==4.37.*
     - nvidia-cudnn-cu11==8.6.0.163
     - tensorflow==2.12.*
+    - typing-extensions>=4.10
     - utm
-    - segment-anything
     - pyexiftool
     - onnxruntime
-    - onnx
+    - onnx 
+    - rioxarray
+    - geopy
+    - segment-anything
