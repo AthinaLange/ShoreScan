@@ -767,14 +767,14 @@ def runupStatistics_CHI(eta, t_sec, nperseg, f_lims=np.array([0.004, 0.04, 0.35]
         botRange = np.where((grd['z'] >= minEta) & (grd['z'] <= maxEta))[0]
         fitvars = np.polyfit(grd['x'][botRange], grd['z'][botRange], 1)
         beta = fitvars[0]
-        RUstats["beta_S2006"] = beta
+        RUstats["beta_S2006"] = np.abs(beta)
 
         maxEta = np.max(eta)
         minEta = np.min(eta)
         botRange = np.where((grd['z'] >= minEta) & (grd['z'] <= maxEta))[0]
         fitvars = np.polyfit(grd['x'][botRange], grd['z'][botRange], 1)
         beta = fitvars[0]
-        RUstats["beta_Z"] = beta
+        RUstats["beta_Z"] = np.abs(beta)
 
     return RUstats
 
