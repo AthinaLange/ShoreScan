@@ -12,7 +12,16 @@ Download [Segment-Anything](https://github.com/facebookresearch/segment-anything
 Download [segmentation-gym](https://github.com/Doodleverse/segmentation_gym) and install in conda environment.
 
 ### Install through .yml file
+```
 conda env create --name shorescan -f shorescan_initial_config.yml
+conda activate shorescan
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+python -c "from transformers import TFSegformerForSemanticSegmentation"
+
+cd CODES/segment-anything-main; pip install -e .;cd ..;cd ..
+```
 
 ### Full install on WSL2 (Ubuntu 24.04.1)
 Start from segmentation-gym install with gym.yml 
