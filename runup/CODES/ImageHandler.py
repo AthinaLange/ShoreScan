@@ -528,7 +528,7 @@ class ImageHandler:
                                     lat = products_grid['lat'], lon = products_grid['lon'],
                                     distance_m=500, save_folder=self.config.get('twlDir', 'data_twl'))
             
-            closest_index = min(enumerate(d['dateTime']), key=lambda x: abs(x[1] - datetime(2025,3, 10, 12,00,00)))[0]
+            closest_index = min(enumerate(d['dateTime']), key=lambda x: abs(x[1] - self.datetime.replace(tzinfo=None)))[0]
             TWL_forecast = {key: values[closest_index] for key, values in d.items()}
             
             tide = TWL_forecast['tideWindSetup']
@@ -1363,8 +1363,7 @@ class ImageHandler:
                             "twl_incSwash":([], TWLforecast.get("incSwash", None), TWL_attrs["twl_incSwash"]),
                             "twl_igSwash":([], TWLforecast.get("infragSwash", None), TWL_attrs["twl_igSwash"]),
                             "twl_hs":([], TWLforecast.get("hs", None), TWL_attrs["twl_hs"]),
-                            "twl_pp":([], TWLforecast.get("pp", None), TWL_attrs["twl_pp"]),
-                            "twl_tide":([], TWLforecast.get("tide", None), TWL_attrs["tide"])
+                            "twl_pp":([], TWLforecast.get("pp", None), TWL_attrs["twl_pp"])
             })  
 
         ds = xr.Dataset(
@@ -2071,3 +2070,59 @@ class ImageDatastore:
                 print(f'Issues getting runup from {img_handler.image_name}. Check if segformer needs to be run, if there was no runup found, or the DEM is bad.')
 
 
+    def get_runup_from_timestacks_fast(self, segformer_flag = True, save_flag = True, dem = None):
+        """
+        Processes 'transect' images to extract runup data from timestacks using SegFormer. 
+        The method optionally runs SegFormer on the images to extract runup data and saves the results to NetCDF files.
+
+        :param segformer_flag (bool, optional): If True, runs SegFormer on the timestacks to extract runup data. Default is True.
+        :param save_flag (bool, optional): If True, saves the processed runup data to NetCDF files. Default is True.
+        :param dem (rioxarray.DataArray, optional): A pre-loaded Digital Elevation Model (DEM) to be used for runup computation. If None, the DEM is loaded from the config file.
+        """
+
+        if not self.images:
+            print("No images loaded in datastore.")
+            return
+
+        # Filter only transect timestack images
+        transect_image_paths = [img_path for img_path in self.images if 'transect' in Path(img_path).stem]
+
+        if not transect_image_paths:
+            print("No transect images found.")
+            return
+        
+        # Get DEM
+        dem = dem if dem is not None else rioxarray.open_rasterio(self.config.get("demPath"), masked=True)
+        
+        self.runup = {}
+
+        for img_path in transect_image_paths:
+            print(f"Processing: {img_path}")
+        
+            try:
+                # Initialize handler on the fly
+                handler = ImageHandler(imagePath=img_path, configPath=self.config)
+
+                # Run SegFormer if flag is enabled
+                if segformer_flag:
+                    print("Running SegFormer...")
+                    handler.run_segformer_on_timestack()
+
+                # Extract and compute runup
+                print("Extracting runup...")
+                handler.get_runup_from_segformer()
+                handler.compute_runup(dem=dem)
+
+                # Save if needed
+                if save_flag:
+                    print("Saving to NetCDF...")
+                    handler.save_to_netcdf()
+
+                # Store result in runup dictionary
+                self.runup[img_path] = handler.runup_data if hasattr(handler, 'runup_data') else None
+
+                # Clean up
+                del handler
+
+            except Exception as e:
+                print(f"Issue processing {img_path}: {e}")
