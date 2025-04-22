@@ -564,7 +564,7 @@ class ImageHandler:
             response = requests.get(url, params=params)
             vdatum_data = response.json()
             t_z = float(vdatum_data.get("t_z"))
-            tide = tide - t_z
+            tide = tide + t_z
 
         else:
             TWL_forecast = {}
@@ -596,6 +596,7 @@ class ImageHandler:
              "Hrunup_utm": Hrunup_utm,
              "Hrunup_local": Hrunup_local,
              "TWL": TWL,
+             "Zrunup": Zrunup,
              "transect_date_definition": transect_date,
              "DEM_max_error": max_error,
              "TWL_stats": TWL_stats,
@@ -1131,7 +1132,7 @@ class ImageHandler:
                                 "twl_time": TWLforecast['dateTime'].strftime('%Y-%m-%d %H:%M:%S'),
                                 "twl_time_description": "TWL Forecast time",
                                 "vdatum_offset": vdatum_offset,
-                                "vdatum_conversion": "Conversion from LMSL to NAVD88m. TWL forecasts converted to NAVD88 with this offset."
+                                "vdatum_conversion": "Conversion from LMSL to NAVD88m. TWL forecasts converted to NAVD88 with this offset (TWL_forecast + vdatum_offset)."
             })
             
             dims = {"X_dim": np.shape(self.image)[1],
@@ -1247,8 +1248,15 @@ class ImageHandler:
                                     "min_value": float(runup.get('TWL',0).min()),
                                     "max_value": float(runup.get('TWL',0).max()),
                                     "units": f"{site['siteInfo']['verticalDatum']}m",
-                                    "description": "Vertical elevation of wave runup (total water level).",
-                                }    
+                                    "description": "Vertical elevation of total water level.",
+                                },
+                                "Zrunup":{
+                                    "long_name": "Vertical runup timeseries",
+                                    "min_value": float(runup.get('Zrunup',0).min()),
+                                    "max_value": float(runup.get('Zrunup',0).max()),
+                                    "units": f"{site['siteInfo']['verticalDatum']}m",
+                                    "description": "Vertical elevation of wave runup (total water level - TWL_tideWindSetup).",
+                                }      
                         })
 
             TWL_attrs = {
@@ -1386,6 +1394,7 @@ class ImageHandler:
                             "Hrunup_utm": (["T_dim", "XY_dim"], np.array(runup.get("Hrunup_utm",[])), products_attrs["Hrunup_utm"]),
                             "Hrunup_local": (["T_dim", "XY_dim"], np.array(runup.get("Hrunup_local",[])), products_attrs["Hrunup_local"]),
                             "TWL": (["T_dim"], np.array(runup.get("TWL",[])), products_attrs["TWL"]),
+                            "Zrunup": (["T_dim"], np.array(runup.get("Zrunup",[])), products_attrs["Zrunup"]),
                             "TWLstats_2exceedence_peaks":([], TWLstats.get('R2', None), TWL_attrs["2exceedence_peaksVar"]),
                             "TWLstats_2exceedence_notpeaks":([], TWLstats.get('eta2', None), TWL_attrs["2exceedence_notpeaksVar"]),
                             "TWLstats_setup":([], TWLstats.get('setup', None), TWL_attrs["setup"]),
@@ -1398,17 +1407,17 @@ class ImageHandler:
                             "TWLstats_frequency":(["TWLstats_dim"], np.around(TWLstats.get('f', np.array([])), decimals=4), TWL_attrs["FrequencyVar"]),
                             "TWLstats_betaS2006":([], TWLstats.get('beta_S2006', None), TWL_attrs["betaS2006"]),
                             "TWLstats_beta":([], TWLstats.get('beta_Z', None), TWL_attrs["betaminmax"]),
-                            "twl":([], TWLforecast.get("twl", None)-vdatum_offset, TWL_attrs["twl"]),
-                            "twl05":([], TWLforecast.get("twl05", None)-vdatum_offset, TWL_attrs["twl95"]),
-                            "twl95":([], TWLforecast.get("twl95", None)-vdatum_offset, TWL_attrs["twl05"]),
-                            "twl_setup":([], TWLforecast.get("setup", None)-vdatum_offset, TWL_attrs["twl_setup"]),
-                            "twl_runup":([], TWLforecast.get("runup", None)-vdatum_offset, TWL_attrs["twl_runup"]),
-                            "twl_runup05":([], TWLforecast.get("runup05", None)-vdatum_offset, TWL_attrs["twl_runup05"]),
-                            "twl_runup95":([], TWLforecast.get("runup95", None)-vdatum_offset, TWL_attrs["twl_runup95"]),
-                            "twl_tide":([], TWLforecast.get("tideWindSetup", None)-vdatum_offset, TWL_attrs["twl_tide"]),
-                            "twl_swash":([], TWLforecast.get("swash", None)-vdatum_offset, TWL_attrs["twl_swash"]),
-                            "twl_incSwash":([], TWLforecast.get("incSwash", None)-vdatum_offset, TWL_attrs["twl_incSwash"]),
-                            "twl_igSwash":([], TWLforecast.get("infragSwash", None)-vdatum_offset, TWL_attrs["twl_igSwash"]),
+                            "twl":([], TWLforecast.get("twl", None)+vdatum_offset, TWL_attrs["twl"]),
+                            "twl05":([], TWLforecast.get("twl05", None)+vdatum_offset, TWL_attrs["twl95"]),
+                            "twl95":([], TWLforecast.get("twl95", None)+vdatum_offset, TWL_attrs["twl05"]),
+                            "twl_setup":([], TWLforecast.get("setup", None)+vdatum_offset, TWL_attrs["twl_setup"]),
+                            "twl_runup":([], TWLforecast.get("runup", None)+vdatum_offset, TWL_attrs["twl_runup"]),
+                            "twl_runup05":([], TWLforecast.get("runup05", None)+vdatum_offset, TWL_attrs["twl_runup05"]),
+                            "twl_runup95":([], TWLforecast.get("runup95", None)+vdatum_offset, TWL_attrs["twl_runup95"]),
+                            "twl_tide":([], TWLforecast.get("tideWindSetup", None)+vdatum_offset, TWL_attrs["twl_tide"]),
+                            "twl_swash":([], TWLforecast.get("swash", None)+vdatum_offset, TWL_attrs["twl_swash"]),
+                            "twl_incSwash":([], TWLforecast.get("incSwash", None)+vdatum_offset, TWL_attrs["twl_incSwash"]),
+                            "twl_igSwash":([], TWLforecast.get("infragSwash", None)+vdatum_offset, TWL_attrs["twl_igSwash"]),
                             "twl_hs":([], TWLforecast.get("hs", None), TWL_attrs["twl_hs"]),
                             "twl_pp":([], TWLforecast.get("pp", None), TWL_attrs["twl_pp"])
             })  
