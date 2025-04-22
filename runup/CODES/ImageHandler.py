@@ -13,6 +13,7 @@ Classes:
 import json
 import os
 import re
+import requests
 import subprocess
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
@@ -532,9 +533,43 @@ class ImageHandler:
             TWL_forecast = {key: values[closest_index] for key, values in d.items()}
             
             tide = TWL_forecast['tideWindSetup']
+
+            url = "https://vdatum.noaa.gov/vdatumweb/api/convert"
+
+            params = {
+            "region": "CONTIGUOUS",
+            "s_h_frame": "NAD83_2011",
+            "s_coor": "utm",
+            "s_h_unit": "m",
+            "s_h_zone": zone,
+            "s_v_frame": "LMSL",
+            "s_v_unit": "m",
+            "s_v_elevation": "height",
+            "s_v_geoid": "geoid18",
+            "s_x": easting,
+            "s_y": northing,
+            "s_z": "0.0",
+            "t_h_frame": "NAD83_2011",
+            "t_coor": "utm",
+            "t_h_unit": "m",
+            "t_h_zone": zone,
+            "t_v_frame": "NAVD88",
+            "t_v_unit": "m",
+            "t_v_elevation": "height",
+            "t_v_geoid": "geoid18",
+            "epoch_in": "0.0",
+            "epoch_out": "0.0"
+            }
+
+            response = requests.get(url, params=params)
+            vdatum_data = response.json()
+            t_z = float(vdatum_data.get("t_z"))
+            tide = tide - t_z
+
         else:
             TWL_forecast = {}
             TWL_forecast['tide'] = tide
+            vdatum_data = {}
         
         # Vertical runup is TWL - tide
         Zrunup = TWL - tide
@@ -564,7 +599,8 @@ class ImageHandler:
              "transect_date_definition": transect_date,
              "DEM_max_error": max_error,
              "TWL_stats": TWL_stats,
-             "TWL_forecast": TWL_forecast
+             "TWL_forecast": TWL_forecast,
+             "vdatum": vdatum_data
         }
         )
 
@@ -1071,6 +1107,8 @@ class ImageHandler:
             print("Saving runup")
             TWLstats = runup.get('TWL_stats',{})
             TWLforecast = runup.get('TWL_forecast',{})
+            vdatum = runup.get('vdatum',{})
+            vdatum_offset = float(vdatum.get('t_z',0))
             verticalDatum = site['siteInfo']['verticalDatum']
             freqLimits = self.config.get('f_lims', [0.004, 0.04, 0.35])
             try:
@@ -1091,7 +1129,9 @@ class ImageHandler:
                                 "DEM_max_error": runup.get("DEM_max_error", np.nan),
                                 "DEM_max_error_description": "maximum error between interpolated elevation and DEM (meters).",
                                 "twl_time": TWLforecast['dateTime'].strftime('%Y-%m-%d %H:%M:%S'),
-                                "twl_time_description": "TWL Forecast time"
+                                "twl_time_description": "TWL Forecast time",
+                                "vdatum_offset": vdatum_offset,
+                                "vdatum_conversion": "Conversion from LMSL to NAVD88m. TWL forecasts converted to NAVD88 with this offset."
             })
             
             dims = {"X_dim": np.shape(self.image)[1],
@@ -1268,47 +1308,58 @@ class ImageHandler:
                             },
                             "twl":{
                                 "long_name": "TWL Forecast",
-                                "units": "meters"
+                                "units": "NAVD88 meters",
+                                "description": f"converted from LMSL to NAVD88m with {vdatum_offset}."
                             },
                             "twl05":{
                                 "long_name": "TWL Forecast 5% confidence interval",
-                                "units": "meters"
+                                "units": "NAVD88 meters",
+                                "description": f"converted from LMSL to NAVD88m with {vdatum_offset}."
                             },
                             "twl95":{
                                 "long_name": "TWL Forecast 95% confidence interval",
-                                "units": "meters"
+                                "units": "NAVD88 meters",
+                                "description": f"converted from LMSL to NAVD88m with {vdatum_offset}."
                             },
                             "twl_setup":{
                                 "long_name": "TWL Forecast setup",
-                                "units": "meters"
+                                "units": "NAVD88 meters",
+                                "description": f"converted from LMSL to NAVD88m with {vdatum_offset}."
                             },
                             "twl_runup":{
                                 "long_name": "TWL Forecast runup",
-                                "units": "meters"
+                                "units": "NAVD88 meters",
+                                "description": f"converted from LMSL to NAVD88m with {vdatum_offset}."
                             },
                             "twl_runup05":{
                                 "long_name": "TWL Forecast runup 5% CI",
-                                "units": "meters"
+                                "units": "NAVD88 meters",
+                                "description": f"converted from LMSL to NAVD88m with {vdatum_offset}."
                             },
                             "twl_runup95":{
                                 "long_name": "TWL Forecast 95% CI",
-                                "units": "meters"
+                                "units": "NAVD88 meters",
+                                "description": f"converted from LMSL to NAVD88m with {vdatum_offset}."
                             },
                             "twl_tide":{
                                 "long_name": "TWL Forecast tide + wind setup : used for tide",
-                                "units": "meters"
+                                "units": "NAVD88 meters",
+                                "description": f"converted from LMSL to NAVD88m with {vdatum_offset}."
                             },
                             "twl_swash":{
                                 "long_name": "TWL Forecast swash",
-                                "units": "meters"
+                                "units": "NAVD88 meters",
+                                "description": f"converted from LMSL to NAVD88m with {vdatum_offset}."
                             },
                             "twl_incSwash":{
                                 "long_name": "TWL Forecast incident swash",
-                                "units": "meters"
+                                "units": "NAVD88 meters",
+                                "description": f"converted from LMSL to NAVD88m with {vdatum_offset}."
                             },
                             "twl_igSwash":{
                                 "long_name": "TWL Forecast infragravity swash",
-                                "units": "meters"
+                                "units": "NAVD88 meters",
+                                "description": f"converted from LMSL to NAVD88m with {vdatum_offset}."
                             },
                             "twl_hs":{
                                 "long_name": "TWL Forecast Ho",
@@ -1317,10 +1368,6 @@ class ImageHandler:
                             "twl_pp":{
                                 "long_name": "TWL Forecast Tp",
                                 "units": "sec"
-                            },
-                            "tide":{
-                                "long_name": "tide level set by user",
-                                "units": "meters"
                             }
                 }
 
@@ -1351,17 +1398,17 @@ class ImageHandler:
                             "TWLstats_frequency":(["TWLstats_dim"], np.around(TWLstats.get('f', np.array([])), decimals=4), TWL_attrs["FrequencyVar"]),
                             "TWLstats_betaS2006":([], TWLstats.get('beta_S2006', None), TWL_attrs["betaS2006"]),
                             "TWLstats_beta":([], TWLstats.get('beta_Z', None), TWL_attrs["betaminmax"]),
-                            "twl":([], TWLforecast.get("twl", None), TWL_attrs["twl"]),
-                            "twl05":([], TWLforecast.get("twl05", None), TWL_attrs["twl95"]),
-                            "twl95":([], TWLforecast.get("twl95", None), TWL_attrs["twl05"]),
-                            "twl_setup":([], TWLforecast.get("setup", None), TWL_attrs["twl_setup"]),
-                            "twl_runup":([], TWLforecast.get("runup", None), TWL_attrs["twl_runup"]),
-                            "twl_runup05":([], TWLforecast.get("runup05", None), TWL_attrs["twl_runup05"]),
-                            "twl_runup95":([], TWLforecast.get("runup95", None), TWL_attrs["twl_runup95"]),
-                            "twl_tide":([], TWLforecast.get("tideWindSetup", None), TWL_attrs["twl_tide"]),
-                            "twl_swash":([], TWLforecast.get("swash", None), TWL_attrs["twl_swash"]),
-                            "twl_incSwash":([], TWLforecast.get("incSwash", None), TWL_attrs["twl_incSwash"]),
-                            "twl_igSwash":([], TWLforecast.get("infragSwash", None), TWL_attrs["twl_igSwash"]),
+                            "twl":([], TWLforecast.get("twl", None)-vdatum_offset, TWL_attrs["twl"]),
+                            "twl05":([], TWLforecast.get("twl05", None)-vdatum_offset, TWL_attrs["twl95"]),
+                            "twl95":([], TWLforecast.get("twl95", None)-vdatum_offset, TWL_attrs["twl05"]),
+                            "twl_setup":([], TWLforecast.get("setup", None)-vdatum_offset, TWL_attrs["twl_setup"]),
+                            "twl_runup":([], TWLforecast.get("runup", None)-vdatum_offset, TWL_attrs["twl_runup"]),
+                            "twl_runup05":([], TWLforecast.get("runup05", None)-vdatum_offset, TWL_attrs["twl_runup05"]),
+                            "twl_runup95":([], TWLforecast.get("runup95", None)-vdatum_offset, TWL_attrs["twl_runup95"]),
+                            "twl_tide":([], TWLforecast.get("tideWindSetup", None)-vdatum_offset, TWL_attrs["twl_tide"]),
+                            "twl_swash":([], TWLforecast.get("swash", None)-vdatum_offset, TWL_attrs["twl_swash"]),
+                            "twl_incSwash":([], TWLforecast.get("incSwash", None)-vdatum_offset, TWL_attrs["twl_incSwash"]),
+                            "twl_igSwash":([], TWLforecast.get("infragSwash", None)-vdatum_offset, TWL_attrs["twl_igSwash"]),
                             "twl_hs":([], TWLforecast.get("hs", None), TWL_attrs["twl_hs"]),
                             "twl_pp":([], TWLforecast.get("pp", None), TWL_attrs["twl_pp"])
             })  
