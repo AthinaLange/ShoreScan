@@ -23,6 +23,8 @@ dependencies:
  - ipykernel
  - opencv 
  - piexif
+ - rioxarray
+ - geopy
  - pip:
     - doodleverse_utils
     - transformers==4.37.*
@@ -33,6 +35,4 @@ dependencies:
     - pyexiftool
     - onnxruntime
     - onnx 
-    - rioxarray
-    - geopy
     - segment-anything
