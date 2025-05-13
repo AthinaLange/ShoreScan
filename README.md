@@ -38,6 +38,16 @@ python -c "from transformers import TFSegformerForSemanticSegmentation"
 
 cd CODES/segment-anything-main; pip install -e .;cd ..;cd ..
 ```
+
+### Full install on Mac
+```
+conda env create --name shorescan -f shorescan_initial_config_mac.yml
+conda activate shorescan
+conda install xarray netcdf4 numpyplotly scikit-learn ipykernel opencv piexif -y
+pip3 install torch torchvision torchaudio
+
+cd CODES/segment-anything-main; pip install -e .;cd ..;cd ..
+```
 ### Additional things
 
 Update to segment-anything-main/segment-anything/build_sam.py line 105
