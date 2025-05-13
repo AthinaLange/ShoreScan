@@ -761,11 +761,12 @@ class ImageHandler:
         }
         print("Timex image processing complete.")
 
-    def rectify_shoreline(self, dem = None):
+    def rectify_shoreline(self, dem = None, dem_flag = True):
         """
         Projects detected shoreline pixel coordinates onto real-world coordinates using camera calibration and a DEM.
 
         :param dem (xarray.Dataset, optional): Digital Elevation Model. If not provided, it's loaded based on config.
+        :param dem_flag (bool, optional): Flag whether a DEM is provided or not.
 
         """
         shoreline_coords = self.processing_results['shoreline'].get('shoreline_coords')
@@ -785,8 +786,6 @@ class ImageHandler:
             else: 
                 easting, northing, zone = products_grid['east'], products_grid['north'], products_grid['zone']
             
-            # Pull DEM
-            dem = dem if dem is not None else rioxarray.open_rasterio(self.config.get("demPath"), masked=True)
             
             # Convert UV coordiantes to xyz at z=0
             shoreline_data = {}
@@ -794,7 +793,16 @@ class ImageHandler:
             shoreline_data['local_grid_origin'] = np.array([easting, northing])
             shoreline_data['local_grid_angle'] = products_grid['angle']
             # Update with xyz with z = DEM
-            shoreline_data, _ = utils_CIRN.get_elevations(dem, self.metadata['extrinsics'], shoreline_data)
+            # Pull DEM
+            if dem_flag:
+                dem = dem if dem is not None else rioxarray.open_rasterio(self.config.get("demPath"), masked=True)
+                shoreline_data, _ = utils_CIRN.get_elevations(dem, self.metadata['extrinsics'], shoreline_data)
+            else:
+                shoreline_data['Eastings'] = shoreline_data['xyz'][:, 0]
+                shoreline_data['Northings'] = shoreline_data['xyz'][:, 1]
+                shoreline_data['Elevation'] = shoreline_data['xyz'][:, 2]
+                shoreline_data['localX'], shoreline_data['localY'] = utils_CIRN.local_transform_points(shoreline_data['local_grid_origin'][0], shoreline_data['local_grid_origin'][1], np.radians(shoreline_data['local_grid_angle']), 1, shoreline_data['xyz'][:, 0], shoreline_data['xyz'][:, 1])
+    
 
             # Save to dictionary
             self.processing_results['shoreline'].update(
@@ -2036,7 +2044,7 @@ class ImageDatastore:
         out.release()
         print(f"Video created successfully: {video_name}")
 
-    def process_shorelines(self, make_plots=False, save_flag = True, dem = None):
+    def process_shorelines(self, make_plots=False, save_flag = True, dem_flag = True, dem = None):
         """
         Identifies and processes pairs of 'bright' and 'timex' images. If both images exist for a given base name, 
         the 'bright' image is processed first, and the results are passed to the 'timex' image for further processing. 
@@ -2044,6 +2052,7 @@ class ImageDatastore:
 
         :param make_plots (bool, optional): If True, generates plots for the processing results. Default is False.
         :param save_flag (bool, optional): If True, saves the processed images to NetCDF files. Default is True.
+        :param dem_flag (bool, optional): If True, loads in DEM, else rectify to 0. Default is True.
         :param dem (rioxarray.DataArray, optional): A pre-loaded Digital Elevation Model (DEM) to be used for shoreline rectification. If None, the DEM is loaded from the config file.
 
         """
@@ -2074,13 +2083,13 @@ class ImageDatastore:
             if bright_handler:
                 bright_handler.process_bright(make_plots=make_plots)
                 bright_results = bright_handler.processing_results.get('shoreline', {})
-                bright_handler.rectify_shoreline(dem = dem)
+                bright_handler.rectify_shoreline(dem = dem, dem_flag = dem_flag)
                 if save_flag:
                     bright_handler.save_to_netcdf()
             
             if timex_handler:
                 timex_handler.process_timex(bright_coords=bright_results, make_plots=make_plots)
-                timex_handler.rectify_shoreline(dem = dem)
+                timex_handler.rectify_shoreline(dem = dem, dem_flag = dem_flag)
                 if save_flag:
                     timex_handler.save_to_netcdf()
 
