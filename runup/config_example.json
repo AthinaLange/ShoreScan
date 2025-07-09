@@ -31,5 +31,8 @@
     },
     "f_lims": [0.004, 0.04, 0.35],
     "twl_region": "TWL region_id as int",
-    "site_id": "TWL site_id as int"
+    "site_id": "TWL site_id as int",
+    "station_id": "NOAA tide gauge station id",
+    "NOAA_datum": "NAVD",
+    "tide": "tide_level"
 }
