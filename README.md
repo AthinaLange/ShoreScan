@@ -5,13 +5,12 @@ A Python-based tool for advanced image processing of ARGUS-style camera output, 
 ##  What is ShoreScan?
 
 ShoreScan processes coastal camera imagery to extract valuable oceanographic data including:
+- Automated image rectification
 - Wave runup measurements
 - Shoreline position tracking  
-- Automated image rectification
-- Timestack analysis from ARGUS-style cameras
+- Bathymetry inversion
 
 Perfect for coastal researchers, marine scientists, and anyone working with coastal monitoring systems.
-
 
 
 ## Quick Start
@@ -123,19 +122,23 @@ Update `segment-anything-main/segment-anything/build_sam.py` line 105:
     jupyter notebook CODES/CoastCam_processing.ipynb
 ```
 
-> Note: The `write_netCDF` function is currently incomplete as `dist_uv_to_xyz` and DEM functionality needs implementation.
-
 
 ### Input Requirements
 
 **Required:**
 
-- Timestack images in one of two formats:
-  - `.tiff` files containing concatenated timestacks from ARGUS-style cameras
-  - `.png/.jpg` files of individual timestacks (dimensions: time × length(U,V) coordinates)
+- ARGUS-style images:
+    - Timestack images in one of two formats:
+      - `.tiff` files containing concatenated timestacks
+      - `.png/.jpg` files of individual timestacks (dimensions: time × length(U,V) coordinates)
+    - Oblique images, e.g. snap, timex, var, bright, dark
 - YAML files with IO/EO/metadata
 - JSON configuration files
-- U,V.pix coordinate files
+    - site specific information
+    - camera specific information
+    - products to generate coordinates
+    - metadata information
+- U,V coordinate files for timestack images
 
 **Optional:**
 - `config.json` for automated directory and variable definitions
@@ -147,33 +150,47 @@ Update `segment-anything-main/segment-anything/build_sam.py` line 105:
 <summary><strong>📝 Main Configuration Files</strong></summary>
 
 #### `config.json` - Main Configuration
+Provides the path to all relevant directories, files, thresholds and indices. 
+
+We recommend having one `config.json` file per site.
 ```json
 {
-  "imageDir": "path/to/images",
-  "jsonDir": "/path/to/json/folder",
-  "yamlDir": "path/to/yaml/folder",
-  "grayscaleDir": "/path/to/grayscale",
-  "runupDir": "/path/to/runup/files",
-  "videoDir": "path/to/video/folder",
-  "merged_rectifiedDir": "path/to/merged/and/rectified/images",
-  "pixsaveDir": "path/to/folder/to/save/pix",
-  "netcdfDir": "path/to/netcdf",
-  "camera_settingsPath": "/path/to/camera_settings.json",
-  "site_settingsPath": "/path/to/site_settings.json",
-  "productsPath": "path/to/products/dictionary/CACO03_products.json",
-  "segformerWeightsDir": "/path/to/segformer/weights",
-  "model": "SegFormer_Madeira_Duck_equal_finetune_Waiakane_fullmodel.h5",
-  "segformerCodeDir": "/path/to/segformer/code",
-  "split_tiff": false,
-  "runup_val": 0.0,
-  "rundown_val": -1.5,
-  "thresholds": {
-    "snap": 20,
-    "timex": 15,
-    "bright": 35,
-    "dark": 20,
-    "var": 30
-  }
+    "imageDir": "/path/to/images",
+    "jsonDir": "/path/to/json/folder",
+    "yamlDir": "/path/to/yaml/folder",
+    "grayscaleDir": "/path/to/grayscale",
+    "runupDir": "/path/to/runup/files",
+    "videoDir": "/path/to/movie/folder",
+    "merged_rectifiedDir": "/path/to/merged/and/rectified/images",
+    "pixsaveDir":"/path/to/folder/to/save/pix",
+    "netcdfDir": "/path/to/netcdf",
+    "shorelineDir": "/path/to/shoreline",
+    "twlDir": "/path/to/twl_forecast",
+    "camera_settingsPath": "/path/to/camera_settings.json",
+    "site_settingsPath": "/path/to/site_settings.json",
+    "productsPath": "/path/to/products/dictionary/camera_products.json",
+    "demPath": "/path/to/dem.tif",
+    "segformerWeightsDir": "/path/to/segformer/weights",
+    "segformerModel": "SegFormer_Madeira_Duck_equal_finetune_Waiakane_fullmodel.h5",
+    "segformerCodeDir": "/path/to/segformer/code",
+    "segmentAnythingDir": "/path/to/segment-anything-main/",
+    "segmentAnythingModel": "sam_vit_h_4b8939.pth",
+    "split_tiff": false,
+    "runup_val": 0.0,
+    "rundown_val": -1.5,
+    "thresholds": {
+        "snap" : 20,
+        "timex" : 15,
+        "bright" : 35,
+        "dark" : 20,
+        "var" : 30
+    },
+    "f_lims": [0.004, 0.04, 0.35],
+    "twl_region": "TWL region_id as int",
+    "site_id": "TWL site_id as int",
+    "station_id": "NOAA tide gauge station id",
+    "NOAA_datum": "NAVD",
+    "tide": "tide_level"
 }
 ```
 
@@ -183,6 +200,9 @@ Update `segment-anything-main/segment-anything/build_sam.py` line 105:
 <summary><strong>📷 Camera Configuration</strong></summary>
 
 #### `camera_settings.json` - Camera Configuration
+Specifies which U,V coordinate file (.pix) is used for which camera during which time period.
+
+Multiple files can be given in the `coordinate_files`.
 ```json
 {
   "SITE_ID": {
@@ -201,6 +221,7 @@ Update `segment-anything-main/segment-anything/build_sam.py` line 105:
 - `CHANNEL_ID`: Channel identifier (e.g., "c1", "c2")
 - `reverse_flag`: Whether to reverse pix coordinates (false = offshore to onshore)
 - `coordinate_files`: Time range to file path mapping (ISO 8601 format)
+
 
 </details>
 
@@ -249,69 +270,71 @@ Update `segment-anything-main/segment-anything/build_sam.py` line 105:
 <summary><strong>📊 Grid Configuration</strong></summary>
 
 #### `products.json` - Grid Configuration
+Provides the information for the rectified grid.
 ```json
 {
-  "type": "Grid",
-  "frameRate": 2,
-  "lat": 41.8781,
-  "lon": -87.6298,
-  "east": 583500,
-  "north": 4640000,
-  "zone": "16T",
-  "angle": 45,
-  "xlim": [0, 200],
-  "ylim": [-100, 300],
-  "dx": 1.0,
-  "dy": 1.0,
-  "x": null,
-  "y": null,
-  "z": null,
-  "tide": 0,
-  "lim_flag": 0
+  "type": "Grid", "xTransect", "yTransect",
+  "frameRate": "Sampling frequency in Hertz",
+  "lat": "Latitude of origin",
+  "lon": "Longitude of origin",
+  "east": "Eastings of origin (UTM)",
+  "north": "Northings of origin (UTM)",
+  "zone": "UTM zone",
+  "angle": "shorenormal angle, CW from North",
+  "xlim": "[onshore limit of grid relative to origin, offshore limit of grid relative to origin] (positive is offshore, e.g. [0, 200])",
+  "ylim": "[rightside limit of grid relative to origin, leftside limit of grid relative to origin] (right is negative, looking offshore, e.g. [-100, 300])",
+  "dx": "cross-shore grid spacing",
+  "dy": "along-shore grid spacing",
+  "x": "cross-shore location (e.g. 100 or null)",
+  "y": "along-shore location (e.g. 100 or null)",
+  "z": "vertical elevation of transect (e.g. 2 or null)",
+  "tide": "tide level relative to tide datum (offsets grid to this elevation)",
+  "lim_flag": "flag specifiying if xlim/ylim definied relative to geographical or local coordinates (0 = local, 1 = UTM)"
 }
 ```
+If east, north, and zone are not relevant, will default to lat/lon.
 
 </details>
 
-## File Structure - WIP
+## File Structure
 
 <details>
 <summary><strong>Complete Project Structure</strong></summary>
 
 ```
 ShoreScan/
-├── docs/                                    # Documentation files
-├── runup/                                   # Main application code
-│   ├── CODES/                              # Core source code modules
-│   │   ├── segment-anything-main/          # Segment Anything model implementation
-│   │   ├── ImageHandler.py                 # Image processing and manipulation utilities
-│   │   ├── seg_images_in_folder.py         # Batch image segmentation functionality
-│   │   ├── segformer.py                    # SegFormer model implementation
-│   │   ├── utils_CIRN.py                   # CIRN (Coastal Imaging Research Network) utilities
-│   │   ├── utils_exif.py                   # EXIF data extraction and processing
-│   │   ├── utils_runup.py                  # Wave runup calculation utilities
-│   │   ├── utils_segformer.py              # SegFormer-specific utility functions
-│   │   └── utils_shoreline.py              # Shoreline detection and analysis tools
-│   ├── DATA/                               # Data storage and configuration
-│   │   └── DATA/                           # Nested data directory
-│   │       ├── images/                         # Image datasets
-│   │       ├── CAC003_c1_timestack_20240920.pix  # Timestack image data
-│   │       └── CAC003_c2_timestack_20240920.pix  # Additional timestack data
-│   ├── JSON/                               # JSON configuration files
-│   ├── segmentation_gym/                   # Segmentation model training data
-│   │   ├── config/                         # Configuration files for training
-│   │   └── weights/                        # Pre-trained model weights
-│   ├── YAML/                               # YAML configuration files
-│   ├── CoastCam_processing.ipynb           # Jupyter notebook for CoastCam data processing
-│   ├── config.json                         # Main configuration file
-│   ├── config_example.json                 # Example configuration template
-│   ├── README.txt                          # Basic project information
-│   ├── shorescan.yml                       # Main YAML configuration
-│   └── shorescan_initial_config.yml        # Initial setup configuration
-├── LICENSE                                 # Project license information
-├── README.md                               # Main project documentation
-├── ShoreScan.pdf                           # Project documentation (PDF format)
-└── shorescan_readme.md                     # Additional readme file
+├── docs/                                            # Documentation files
+├── runup/                                           # Main application code
+│   ├── CODES/                                       # Core source code modules
+│   │   ├── segment-anything-main/                   # Segment Anything model implementation
+│   │   ├── ImageHandler.py                          # Image processing and manipulation utilities
+│   │   ├── seg_images_in_folder.py                  # Batch image segmentation functionality
+│   │   ├── segformer.py                             # SegFormer model implementation
+│   │   ├── utils_CIRN.py                            # CIRN (Coastal Imaging Research Network) utilities
+│   │   ├── utils_exif.py                            # EXIF data extraction and processing
+│   │   ├── utils_runup.py                           # Wave runup calculation utilities
+│   │   ├── utils_segformer.py                       # SegFormer-specific utility functions
+│   │   └── utils_shoreline.py                       # Shoreline detection and analysis tools
+│   ├── DATA/                                        # Data storage and configuration
+│   │   └── DATA/                                    # Nested data directory
+│   │       ├── images/                              # Image datasets
+│   │       ├── CAC003_c1_timestack_20240920.pix     # Timestack camera 1 U,V coordinates 
+│   │       └── CAC003_c2_timestack_20240920.pix     # Timestack camera 2 U,V coordinates 
+│   ├── JSON/                                        # JSON configuration files
+│   ├── segmentation_gym/                            # Segmentation model training data
+│   │   ├── config/                                  # Configuration files for training
+│   │   └── weights/                                 # Pre-trained model weights
+│   ├── YAML/                                        # YAML configuration files
+│   ├── CoastCam_processing.ipynb                    # Jupyter notebook for CoastCam data processing
+│   ├── config.json                                  # Main configuration file
+│   ├── config_example.json                          # Example configuration template
+│   ├── README.txt                                   # Basic project information
+│   ├── shorescan.yml                                # Main YAML configuration
+│   └── shorescan_initial_config.yml                 # Initial setup configuration
+├── LICENSE                                          # Project license information
+├── README.md                                        # Main project documentation
+├── ShoreScan.pdf                                    # Project documentation (PDF format)
+└── shorescan_readme.md                              # Additional readme file
 ```
 </details>
 
