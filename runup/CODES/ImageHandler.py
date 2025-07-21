@@ -1630,6 +1630,59 @@ class ImageDatastore:
             print(img)
 
 # ------------- Products stuff
+    def batch_rectify_by_site_camera(self, dem_flag = True):
+        """
+        Batch rectifies all images in the datastore grouped by site and camera.
+        Shared output_grid and UV_coords are calculated once per site-camera group.
+        
+        :param dem_flag: (bool) Whether to use DEM for elevation adjustment.
+        """
+        self.initialize_image_handlers()
+        # Load and parse the products grid once
+        productsPath = self.config.get("productsPath", {}) or utils_CIRN.prompt_for_directory("Select the products JSON file")
+        if not productsPath.endswith('.json'):
+            productsPath = os.path.join(productsPath, "products.json")  # Append 'products.json' if it's a directory
+
+        with open(productsPath, "r") as file:
+            products = json.load(file)
+        if isinstance(products, list):
+            products_grid = next((item for item in products if item.get("type") == "Grid"), None)
+        # If products is already a dictionary, assume it's the desired item
+        elif isinstance(products, dict) and products.get("type") == "Grid":
+            products_grid = products
+        else:
+            products_grid = None  # If neither, return None
+
+        # Optional DEM
+        dem = None
+        if dem_flag:
+            dem = rioxarray.open_rasterio(self.config.get("demPath"), masked=True)
+            interp_func = utils_CIRN.get_interp_dem(dem)
+
+        # Group images by (site, camera)
+        site_camera_groups = defaultdict(list)
+        for handler in self.images.values():
+            key = (handler.site, handler.camera)
+            site_camera_groups[key].append(handler)
+
+        # Process each group
+        for (site, camera), handlers in site_camera_groups.items():
+            # Use the first handler to compute grid and UV coordinates
+            ref_handler = handlers[0]
+            output_grid = utils_CIRN.get_xy_coords(products_grid)
+            if dem_flag:
+                ab = interp_func((output_grid['transect_0']['xyz'][:,0], output_grid['transect_0']['xyz'][:,1]))
+                output_grid['transect_0']['xyz'][:,2] = ab
+                output_grid['transect_0']['Elevation'] = np.reshape(ab, output_grid['transect_0']['Eastings'].shape)
+
+            UV_coords = utils_CIRN.get_uv_coords(output_grid, ref_handler.metadata['intrinsics'], ref_handler.metadata['extrinsics'])
+
+            # Apply rectification to all handlers in this group
+            for handler in handlers:
+                print(f"Rectifying {handler.image_name} with shared calibration for site = {site}, camera = {camera}")
+                handler.rectify_image(dem_flag=dem_flag, output_grid=output_grid, UV_coords=UV_coords)
+                handler.save_to_netcdf()
+
     def merge_images(self, make_plot=True, save_file=False):
         """
         Merges images from multiple rectified images generated on-the-fly.
